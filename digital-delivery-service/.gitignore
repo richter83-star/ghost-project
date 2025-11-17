@@ -1,0 +1,1 @@
+This file tells Git to ignore sensitive files and unnecessary folders.Ignore all environment variables. This is the most important!.envIgnore the massive folder of downloaded libraries.This folder is rebuilt by running "npm install".node_modules/Ignore system files.DS_Store
