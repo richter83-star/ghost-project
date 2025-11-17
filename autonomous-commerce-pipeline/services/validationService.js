@@ -10,46 +10,28 @@ export function validateJobData(data) {
   if (!data.title || data.title.trim() === '') {
     throw new Error('Validation Failed: Missing or empty product title.');
   }
-  if (!data.productType || data.productType.trim() === '') {
-    throw new Error('Validation Failed: Missing or empty productType.');
-  }
+// ... existing code ...
   if (!data.price || isNaN(data.price) || Number(data.price) <= 0) {
     throw new Error('Validation Failed: Missing, invalid, or zero price.');
   }
-  if (!data.imageUrl || !isValidHttpUrl(data.imageUrl)) {
-    throw new Error('Validation Failed: Missing or invalid imageUrl.');
-  }
+  // REMOVED: imageUrl validation. The pipeline will generate the image.
 
   // Return a cleaned-up version
   return {
-    ...data,
-    title: data.title.trim(),
+// ... existing code ...
     productType: data.productType.trim(),
     price: Number(data.price),
   };
 }
 
 /**
- * Checks if a product description is missing or too short.
- * @param {string} description - The product description.
+// ... existing code ...
  * @returns {boolean} - True if description is missing/short, false otherwise.
  */
 export function isDescriptionMissing(description) {
+// ... existing code ...
   const minLength = config.validation.minDescriptionLength;
   return !description || description.trim().length < minLength;
 }
 
-/**
- * Simple URL validator.
- * @param {string} string - The URL string to test.
- * @returns {boolean}
- */
-function isValidHttpUrl(string) {
-  let url;
-  try {
-    url = new URL(string);
-  } catch (_) {
-    return false;
-  }
-  return url.protocol === "http:" || url.protocol === "https:";
-}
+// REMOVED: The isValidHttpUrl function is no longer needed.
