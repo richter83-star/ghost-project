@@ -1,0 +1,17 @@
+{
+  "name": "autonomous-commerce-pipeline",
+  "version": "1.0.0",
+  "description": "Autonomous product publishing pipeline from Firestore to Shopify.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "firebase-admin": "^12.1.0",
+    "node-fetch": "^3.3.2"
+  }
+}
