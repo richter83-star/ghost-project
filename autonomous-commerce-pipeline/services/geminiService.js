@@ -65,8 +65,6 @@ export async function generateImage(prompt) {
   try {
     const result = await fetchWithRetry(imageApiUrl, options);
     
-    // Note: The response structure for Imagen on Vertex AI / Gemini API can vary.
-    // We assume standard base64 response.
     const base64ImageData = result.predictions?.[0]?.bytesBase64Encoded;
 
     if (!base64ImageData) {
@@ -78,7 +76,6 @@ export async function generateImage(prompt) {
 
   } catch (error) {
     console.error(`Imagen API call failed: ${error.message}`);
-    // Return a placeholder or throw depending on preference. Throwing stops the pipeline.
     throw new Error(`Failed to generate image: ${error.message}`);
   }
 }
