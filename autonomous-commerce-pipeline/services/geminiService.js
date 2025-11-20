@@ -2,41 +2,57 @@ import { config } from '../config.js';
 import { fetchWithRetry } from '../utils/apiHelper.js';
 
 const { apiKey, model, descriptionPrompt } = config.gemini;
-// ... existing code ...
- * @returns {Promise<string>} - The generated description text.
- */
-export async function generateDescription(jobData) {
-  const { title, productType } = jobData; // Removed imageUrl
+const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  // Construct the user prompt
+export async function generateDescription(jobData) {
+  const { title, productType } = jobData;
+
   const userQuery = `
     Product Title: "${title}"
     Product Type: "${productType}"
-  `; // Removed Image URL
+  `;
 
   const payload = {
-// ... existing code ...
+    contents: [{ parts: [{ text: userQuery }] }],
+    systemInstruction: {
+      parts: [{ text: descriptionPrompt }],
+    },
+  };
+
+  const options = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+
+  try {
+    const result = await fetchWithRetry(apiUrl, options, 3, 2000);
+
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      throw new Error('Gemini API returned an invalid response structure.');
+    }
+    
+    return text.replace(/["']/g, '').trim();
+
   } catch (error) {
     console.error(`Gemini API call failed: ${error.message}`);
     throw new Error(`Failed to generate description: ${error.message}`);
   }
 }
 
-/**
- * Generates a product image using the Imagen 4 model.
- * @param {string} prompt - The prompt for image generation.
- * @returns {Promise<string>} - The base64 encoded image data.
- */
 export async function generateImage(prompt) {
-  // Use the imagen-4.0-generate-001 model for image generation
-  const apiUrl = `https://generativelace.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
+  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
 
   const payload = {
-    instances: {
-      prompt: `A stunning, high-resolution 8k, commercial product photo, on a clean studio background, of: ${prompt}`
-    },
+    instances: [
+      {
+        prompt: `A stunning, high-resolution 8k, commercial product photo, on a clean studio background, of: ${prompt}`
+      }
+    ],
     parameters: {
-      "sampleCount": 1
+      sampleCount: 1
     }
   };
 
@@ -47,10 +63,14 @@ export async function generateImage(prompt) {
   };
 
   try {
-    const result = await fetchWithRetry(apiUrl, options);
+    const result = await fetchWithRetry(imageApiUrl, options);
+    
+    // Note: The response structure for Imagen on Vertex AI / Gemini API can vary.
+    // We assume standard base64 response.
     const base64ImageData = result.predictions?.[0]?.bytesBase64Encoded;
 
     if (!base64ImageData) {
+      console.error("Imagen API Response:", JSON.stringify(result, null, 2));
       throw new Error('Imagen API returned an invalid response structure.');
     }
     
@@ -58,6 +78,7 @@ export async function generateImage(prompt) {
 
   } catch (error) {
     console.error(`Imagen API call failed: ${error.message}`);
+    // Return a placeholder or throw depending on preference. Throwing stops the pipeline.
     throw new Error(`Failed to generate image: ${error.message}`);
   }
 }
