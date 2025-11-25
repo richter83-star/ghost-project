@@ -2,16 +2,12 @@ import os
 import random
 import firebase_admin
 from firebase_admin import credentials, firestore
-from datetime import datetime
+from datetime import datetime, timezone
 
 def initialize_firebase():
     """
     Initializes the Firebase Admin SDK.
-    It looks for the service account key in a file path
-    specified by the 'FIREBASE_SERVICE_ACCOUNT_PATH' environment variable,
-    or a secret file named 'oracle_service_account.json'.
     """
-    # Render's "Secret File" will be at a specific path
     secret_file_path = os.environ.get('FIREBASE_SERVICE_ACCOUNT_PATH', 'oracle_service_account.json')
 
     if not os.path.exists(secret_file_path):
@@ -20,9 +16,13 @@ def initialize_firebase():
         return None
 
     try:
-        cred = credentials.Certificate(secret_file_path)
-        firebase_admin.initialize_app(cred)
-        print("Firebase Admin initialized successfully.")
+        # Check if app is already initialized to avoid errors
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(secret_file_path)
+            firebase_admin.initialize_app(cred)
+            print("Firebase Admin initialized successfully.")
+        else:
+            print("Firebase Admin already initialized.")
         return firestore.client()
     except Exception as e:
         print(f"Error initializing Firebase: {e}")
@@ -30,42 +30,59 @@ def initialize_firebase():
 
 def generate_product_job(db, jobs_collection_name):
     """
-    Generates a sample product and writes it to Firestore
+    Generates a sample DIGITAL-ONLY product and writes it to Firestore
     with 'status: pending'.
     """
     if db is None:
         print("Firestore client is not initialized. Exiting.")
         return
 
-    # Sample data to create a product job
+    # Strictly Digital Sample Products
     sample_products = [
         {
-            "title": "Quantum T-Shirt",
-            "description": "A stylish t-shirt that's both here and there.",
-            "productType": "Apparel",
-            "price": 29.99,
-            "imageUrl": "https://placehold.co/600x600/9333ea/white?text=Quantum+Tee"
+            "title": "Ultimate Notion CRM System",
+            "description": "A complete, pre-built Notion workspace for managing client relationships. Includes dashboard, pipeline view, and contact database. This is a digital download. No physical item will be shipped.",
+            "productType": "notion_system",
+            "price": 29.00,
+            "deliveryType": "digital",
+            "imageUrl": "https://placehold.co/600x400/2c2c2c/FFF?text=Notion+CRM+System",
+            "digitalContent": "https://notion.so/template-link-placeholder-crm-v1"
         },
         {
-            "title": "NeuralSip Coffee Mug",
-            "description": "Start your day with an AI-powered brew.",
-            "productType": "Homeware",
-            "price": 18.50,
-            "imageUrl": "https://placehold.co/600x600/f59e0b/white?text=NeuralSip+Mug"
+            "title": "Midjourney V6 'Cyber-Noir' Prompt Pack",
+            "description": "A curated collection of 50 high-quality prompts for generating cyberpunk noir art. Instant digital access. No physical shipping.",
+            "productType": "digital_prompt_pack",
+            "price": 12.50,
+            "deliveryType": "digital",
+            "imageUrl": "https://placehold.co/600x400/0f172a/0ea5e9?text=Cyber+Noir+Prompts",
+            "digitalContent": "1. /imagine prompt: neon rain slicked street... \n2. /imagine prompt: holographic detective..."
         },
         {
-            "title": "Cybernetic Bonsai",
-            "description": "A mix of ancient tradition and future tech. Needs no watering.",
-            "productType": "Decor",
-            "price": 89.99,
-            "imageUrl": "https://placehold.co/600x600/10b981/white?text=Cyber+Bonsai"
+            "title": "E-commerce Email Automation Kit",
+            "description": "A set of 10 proven email marketing templates for welcome series, abandoned cart, and post-purchase flows. Digital text files only.",
+            "productType": "automation_template",
+            "price": 19.99,
+            "deliveryType": "digital",
+            "imageUrl": "https://placehold.co/600x400/1e293b/FFF?text=Email+Automation+Kit",
+            "digitalContent": "Subject: Welcome to the family! \nBody: Hi {{first_name}}, thanks for joining..."
         },
         {
-            "title": "Ghost-Project Hoodie",
-            "description": "The perfect hoodie for autonomous developers.",
-            "productType": "Apparel",
-            "price": 65.00,
-            "imageUrl": "https://placehold.co/600x600/3b82f6/white?text=Ghost+Hoodie"
+            "title": "YouTube Script Bundle: Tech Reviews",
+            "description": "5 plug-and-play script templates for tech review videos. Includes hooks, body structure, and CTA examples. Instant PDF download.",
+            "productType": "script_bundle",
+            "price": 9.99,
+            "deliveryType": "digital",
+            "imageUrl": "https://placehold.co/600x400/dc2626/FFF?text=YT+Script+Bundle",
+            "digitalContent": "Video 1 Structure: \n0:00 Hook: 'Is this the iPhone killer?'\n0:45 Intro..."
+        },
+        {
+            "title": "Freelance Client Onboarding Workflow",
+            "description": "A comprehensive checklist and email sequence for onboarding new freelance clients professionally. Digital asset pack.",
+            "productType": "workflow_kit",
+            "price": 15.00,
+            "deliveryType": "digital",
+            "imageUrl": "https://placehold.co/600x400/059669/FFF?text=Client+Onboarding+Kit",
+            "digitalContent": "Step 1: Send Contract (Template attached)\nStep 2: Send Welcome Packet..."
         }
     ]
 
@@ -74,12 +91,12 @@ def generate_product_job(db, jobs_collection_name):
     
     # Add the job-specific fields
     product_data['status'] = 'pending'
-    product_data['createdAt'] = datetime.utcnow()
+    product_data['createdAt'] = datetime.now(timezone.utc)
 
     try:
         # Add a new document with an auto-generated ID
         doc_ref = db.collection(jobs_collection_name).add(product_data)
-        print(f"Successfully created product job with ID: {doc_ref[1].id}")
+        print(f"Successfully created DIGITAL product job with ID: {doc_ref[1].id}")
         print(f"Product: {product_data['title']}")
     except Exception as e:
         print(f"Error creating Firestore job: {e}")
@@ -88,15 +105,15 @@ def main():
     """
     Main function to run the Oracle job.
     """
-    print(f"Oracle 'brain.py' started at {datetime.utcnow().isoformat()}Z")
+    print(f"Oracle Digital 'brain.py' started at {datetime.now(timezone.utc).isoformat()}")
     
-    # Get the collection name from environment variables, default to 'products'
     jobs_collection_name = os.environ.get('FIRESTORE_JOBS_COLLECTION', 'products')
     
     db = initialize_firebase()
-    generate_product_job(db, jobs_collection_name)
+    if db:
+        generate_product_job(db, jobs_collection_name)
     
-    print(f"Oracle 'brain.py' finished at {datetime.utcnow().isoformat()}Z")
+    print(f"Oracle Digital 'brain.py' finished at {datetime.now(timezone.utc).isoformat()}")
 
 if __name__ == "__main__":
     main()
