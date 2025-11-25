@@ -1,40 +1,51 @@
-import * as admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 
-// ------------------------------
-// 1. Initialize Admin SDK
-// ------------------------------
-if (!admin.apps.length) {
+let db: FirebaseFirestore.Firestore | null = null;
+
+/**
+ * Initialize Firebase Admin using FIREBASE_SERVICE_ACCOUNT_JSON env var.
+ */
+function initAdmin() {
+  if (db) return; // already initialized
+
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
   if (!serviceAccountJson) {
     console.error(
       '[GhostSystems] ❌ FIREBASE_SERVICE_ACCOUNT_JSON missing. Nexus listener will NOT run.'
     );
-  } else {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+    return;
+  }
+
+  try {
+    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert(serviceAccount as any),
       });
-      console.log('[GhostSystems] ✅ Firebase Admin initialized for Nexus.');
-    } catch (err) {
-      console.error(
-        '[GhostSystems] ❌ Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:',
-        err
-      );
     }
+
+    db = getFirestore();
+    console.log('[GhostSystems] ✅ Firebase Admin initialized for Nexus.');
+  } catch (err) {
+    console.error(
+      '[GhostSystems] ❌ Failed to initialize Firebase Admin from FIREBASE_SERVICE_ACCOUNT_JSON:',
+      err
+    );
   }
 }
 
-const db = admin.firestore();
-
-// ------------------------------
-// 2. PENDING -> DRAFT listener
-// ------------------------------
+/**
+ * Listen for products with status === "pending" and move them to "draft".
+ */
 export function startNexusListener() {
-  if (!admin.apps.length) {
+  initAdmin();
+
+  if (!db) {
     console.error(
-      '[GhostSystems] ❌ Firebase Admin not initialized. startNexusListener() aborted.'
+      '[GhostSystems] ❌ Firestore not initialized. Aborting Nexus listener.'
     );
     return;
   }
@@ -58,7 +69,7 @@ export function startNexusListener() {
         const docSnap = change.doc;
         const data = docSnap.data();
         const productId = docSnap.id;
-        const title = data?.title || '(no title)';
+        const title = (data as any)?.title || '(no title)';
 
         console.log(
           `[GhostSystems] (a) Found PENDING product: ${productId} - "${title}"`
@@ -67,7 +78,7 @@ export function startNexusListener() {
         try {
           await productsRef.doc(productId).update({
             status: 'draft',
-            movedToDraftAt: admin.firestore.FieldValue.serverTimestamp(),
+            movedToDraftAt: FieldValue.serverTimestamp(),
           });
 
           console.log(
