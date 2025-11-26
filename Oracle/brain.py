@@ -1,340 +1,360 @@
-# Oracle/brain.py
 import os
-import json
 import random
+import hashlib
 from datetime import datetime, timezone
+from typing import Dict, Any, List
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
 
-# ----------------------------
-# Firebase init (Admin SDK)
-# ----------------------------
+# -----------------------------
+# Config
+# -----------------------------
+DEFAULT_COLLECTION = os.environ.get("FIRESTORE_JOBS_COLLECTION", "products")
+SERVICE_ACCOUNT_PATH = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "oracle_service_account.json")
+
+# How many product docs to create per run
+ORACLE_CREATE_COUNT = int(os.environ.get("ORACLE_CREATE_COUNT", "1"))
+
+# Percent chance we create a bundle vs a single product
+BUNDLE_WEIGHT = float(os.environ.get("ORACLE_BUNDLE_WEIGHT", "0.80"))  # 0.80 = 80%
+
+# Marketing tone: "clean" (default) or "spicy"
+MARKETING_TONE = os.environ.get("ORACLE_MARKETING_TONE", "spicy").strip().lower()
+
+# A simple throttle key to reduce repeats. If present, we include it in the seed hash.
+RUN_SALT = os.environ.get("ORACLE_RUN_SALT", "")
+
+
+# -----------------------------
+# Firebase init
+# -----------------------------
 def initialize_firebase():
     """
-    Supports either:
-      1) FIREBASE_SERVICE_ACCOUNT_PATH -> path to a JSON key file (Render Secret File path)
-      2) FIREBASE_SERVICE_ACCOUNT_JSON -> raw JSON string (less common; still supported)
+    Initializes Firebase Admin SDK and returns Firestore client.
+    Uses Render Secret File path in FIREBASE_SERVICE_ACCOUNT_PATH.
     """
-    if firebase_admin._apps:
-        return firestore.client()
-
-    sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
-    sa_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "").strip()
-
-    if sa_json:
-        try:
-            info = json.loads(sa_json)
-            cred = credentials.Certificate(info)
-            firebase_admin.initialize_app(cred)
-            print("[Oracle] ✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT_JSON")
-            return firestore.client()
-        except Exception as e:
-            print(f"[Oracle] ❌ Failed to init Firebase from FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
-            return None
-
-    if not sa_path:
-        sa_path = "oracle_service_account.json"  # optional local fallback name
-
-    if not os.path.exists(sa_path):
-        print(f"[Oracle] ❌ Service account key file not found at: {sa_path}")
-        print("[Oracle]    Set FIREBASE_SERVICE_ACCOUNT_PATH to the Render Secret File path.")
+    if not os.path.exists(SERVICE_ACCOUNT_PATH):
+        print(f"[Oracle] ERROR: Service account key file not found at: {SERVICE_ACCOUNT_PATH}")
+        print("[Oracle] Add it as a Render Secret File and set FIREBASE_SERVICE_ACCOUNT_PATH to that path.")
         return None
 
     try:
-        cred = credentials.Certificate(sa_path)
-        firebase_admin.initialize_app(cred)
-        print("[Oracle] ✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT_PATH")
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
+            firebase_admin.initialize_app(cred)
+            print("[Oracle] ✅ Firebase Admin initialized.")
+        else:
+            print("[Oracle] ✅ Firebase Admin already initialized.")
         return firestore.client()
     except Exception as e:
-        print(f"[Oracle] ❌ Failed to init Firebase from file path: {e}")
+        print(f"[Oracle] ERROR initializing Firebase: {e}")
         return None
 
 
-# ----------------------------
-# Product generation rules
-# ----------------------------
-CURRENCY = "USD"
-COLLECTION = os.environ.get("FIRESTORE_PRODUCTS_COLLECTION", "products")
-
-# You wanted digital-only: enforce it at the source.
-DELIVERY_TYPE = "digital"
-
-# Heavily biased toward bundles (high price, higher AOV).
-PRODUCT_TYPE_WEIGHTS = [
-    ("bundle", 0.55),
-    ("automation_kit", 0.30),
-    ("prompt_pack", 0.15),
-]
-
-SECRET_HOOKS = [
-    "Limited-time bundle drop",
-    "Only chance to grab this combo",
-    "Playbook they don't want you to have",
-    "Founder-grade system in a box",
-    "Steal my workflow (ethically)",
-    "Unfair advantage kit",
-]
-
-NICHES = [
-    "creator economy",
-    "ecommerce",
-    "agency ops",
-    "productivity",
-    "personal brand",
-    "AI content",
-]
+# -----------------------------
+# Product generation (digital-only, bundle-first)
+# -----------------------------
+def _now():
+    return datetime.now(timezone.utc)
 
 
-PROMPT_PACKS = [
-    {
-        "base_title": "Midjourney V6 Cyber-Noir Prompt Pack",
-        "tags": ["midjourney", "prompt pack", "cyber noir", "ai art"],
-        "digital_content": "Includes: 60 image prompts + 10 style recipes + 5 upscale presets.\nUse: paste prompts into Midjourney / similar tools.\nBonus: 'Consistency' mini-guide.",
-        "image_prompt": "Futuristic cyber-noir moodboard, neon rain, cinematic lighting, high contrast, sleek typography, digital product cover",
-    },
-    {
-        "base_title": "ChatGPT High-Converting Landing Page Prompt Pack",
-        "tags": ["chatgpt", "copywriting", "landing page", "prompts"],
-        "digital_content": "Includes: 40 prompts for hooks, offers, FAQs, objection handling, and A/B variants.\nBonus: 10 'limited-time' angle templates.",
-        "image_prompt": "Minimalist dark tech cover, electric purple accent, crisp typography, 'Prompt Pack' label, modern ecommerce style",
-    },
-    {
-        "base_title": "YouTube Script Hooks Prompt Pack (Tech + AI)",
-        "tags": ["youtube", "scripts", "hooks", "prompts"],
-        "digital_content": "Includes: 100 hook formulas + 25 cold-open templates + 10 retention loops.\nBonus: pacing guide + CTA library.",
-        "image_prompt": "Bold modern cover, dark background, high contrast title, play button motif abstract, digital product design",
-    },
-]
-
-AUTOMATION_KITS = [
-    {
-        "base_title": "Ultimate Notion CRM System (Templates + SOPs)",
-        "tags": ["notion", "crm", "templates", "operations"],
-        "digital_content": "Includes: Notion CRM template + pipeline views + onboarding SOPs + follow-up sequences.\nBonus: KPI dashboard + daily workflow.",
-        "image_prompt": "Clean SaaS-style dashboard mock cover, dark mode UI, minimal, professional, digital template kit",
-    },
-    {
-        "base_title": "E-commerce Email Automation Kit (Welcome + Abandon + Winback)",
-        "tags": ["ecommerce", "email", "automation", "klaviyo", "shopify"],
-        "digital_content": "Includes: 12 email templates + flow map (welcome/abandon/winback) + segmentation rules.\nBonus: subject line bank.",
-        "image_prompt": "Email flow diagram aesthetic, dark theme, modern arrows, digital kit packaging design",
-    },
-    {
-        "base_title": "Freelance Client Onboarding Workflow (Contracts + Checklist + Emails)",
-        "tags": ["freelance", "onboarding", "workflow", "operations"],
-        "digital_content": "Includes: onboarding checklist + email sequence + intake form + project kickoff SOP.\nBonus: scope-control scripts.",
-        "image_prompt": "Minimal pro cover, checklist motif, dark theme, clean typography, digital workflow kit",
-    },
-]
-
-# Bundle mapping: pair prompt_pack + automation_kit
-BUNDLES = [
-    {
-        "title": "Creator Growth Bundle: Hooks + Funnel System",
-        "prompt_pack_index": 2,     # YouTube hooks
-        "automation_kit_index": 0,  # Notion CRM
-        "tags": ["bundle", "creator", "growth", "system"],
-    },
-    {
-        "title": "E-commerce Revenue Bundle: Copy Prompts + Email Automation",
-        "prompt_pack_index": 1,     # Landing page prompts
-        "automation_kit_index": 1,  # Email automation kit
-        "tags": ["bundle", "ecommerce", "conversion", "automation"],
-    },
-    {
-        "title": "Client Machine Bundle: Sales Page Prompts + Onboarding Workflow",
-        "prompt_pack_index": 1,     # Landing page prompts
-        "automation_kit_index": 2,  # Onboarding workflow
-        "tags": ["bundle", "agency", "ops", "automation"],
-    },
-]
+def _slug_hash(text: str) -> str:
+    h = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return h[:12]
 
 
-def weighted_choice(weighted_items):
-    r = random.random()
-    cumulative = 0.0
-    for item, w in weighted_items:
-        cumulative += w
-        if r <= cumulative:
-            return item
-    return weighted_items[-1][0]
-
-
-def estimate_metrics(product_type, price):
-    # Rough internal cost estimate for API calls + infra per item (kept tiny but non-zero)
-    cost_low = 0.50
-    cost_high = 3.00 if product_type == "bundle" else 2.00
-
-    # Popularity shelf-life estimate (how long it stays "fresh" as an offer)
-    # Bundles: shorter, because scarcity angle works best in bursts.
-    if product_type == "bundle":
-        pop_days = random.randint(3, 10)
+def _hooks() -> List[str]:
+    # Keep these as marketing hooks, but not outright scammy.
+    base = [
+        "Instant digital access. No shipping.",
+        "Built for speed: copy, paste, deploy.",
+        "High-leverage templates you can reuse forever.",
+    ]
+    if MARKETING_TONE == "spicy":
+        base += [
+            "Limited-time bundle drop.",
+            "Only chance to grab this combo (for now).",
+            "Playbooks most people never standardize.",
+        ]
     else:
-        pop_days = random.randint(7, 30)
-
-    profit_low = round(max(0.0, price - cost_high), 2)
-    profit_high = round(max(0.0, price - cost_low), 2)
-
-    return {
-        "estimatedCostRangeUsd": [cost_low, cost_high],
-        "profitabilityRangeUsd": [profit_low, profit_high],
-        "popularityEstimateDays": pop_days,
-    }
+        base += [
+            "Bundle & save (limited window).",
+            "Founder bundle pricing.",
+        ]
+    return base
 
 
-def build_prompt_pack():
-    base = random.choice(PROMPT_PACKS)
-    price = round(random.choice([12.00, 17.00, 24.00, 29.00]), 2)
-
-    hook = random.choice(SECRET_HOOKS)
-    niche = random.choice(NICHES)
-
-    title = f"{base['base_title']} ({niche})"
-    description = (
-        f"{hook}. Digital prompt pack designed for {niche}. "
-        "Instant download. No physical items. Includes clear instructions."
-    )
-
-    metrics = estimate_metrics("prompt_pack", price)
-
-    return {
-        "title": title,
-        "description": description,
-        "productType": "prompt_pack",
-        "deliveryType": DELIVERY_TYPE,
-        "price": price,
-        "currency": CURRENCY,
-        "tags": list(set(base["tags"] + [niche, "digital"])),
-        "marketingHooks": [hook, "Instant download", "Limited-time angles included"],
-        "imagePrompt": base["image_prompt"],
-        "digitalContent": base["digital_content"],
-        **metrics,
-    }
+def _pricing_for(kind: str) -> float:
+    # Heuristic ranges (not “truth”; just defaults you can tune)
+    if kind == "prompt_pack":
+        return round(random.uniform(19, 49), 2)
+    if kind == "automation_kit":
+        return round(random.uniform(39, 99), 2)
+    if kind == "bundle":
+        # Price to feel premium
+        return round(random.uniform(119, 299), 2)
+    return round(random.uniform(19, 79), 2)
 
 
-def build_automation_kit():
-    base = random.choice(AUTOMATION_KITS)
-    price = round(random.choice([39.00, 59.00, 79.00, 119.00, 149.00]), 2)
-
-    hook = random.choice(SECRET_HOOKS)
-    niche = random.choice(NICHES)
-
-    title = f"{base['base_title']} ({niche})"
-    description = (
-        f"{hook}. A complete automation kit for {niche}. "
-        "Templates + SOPs + scripts. Digital delivery only."
-    )
-
-    metrics = estimate_metrics("automation_kit", price)
-
-    return {
-        "title": title,
-        "description": description,
-        "productType": "automation_kit",
-        "deliveryType": DELIVERY_TYPE,
-        "price": price,
-        "currency": CURRENCY,
-        "tags": list(set(base["tags"] + [niche, "digital"])),
-        "marketingHooks": [hook, "Systemized workflow", "Plug-and-play templates"],
-        "imagePrompt": base["image_prompt"],
-        "digitalContent": base["digital_content"],
-        **metrics,
-    }
+def _digital_image_placeholder(title: str) -> str:
+    # Temporary placeholder image until image generation is wired in
+    safe = title.replace(" ", "+")[:60]
+    return f"https://placehold.co/1024x1024/0f172a/ffffff?text={safe}"
 
 
-def build_bundle():
-    bundle = random.choice(BUNDLES)
-    prompt_pack = PROMPT_PACKS[bundle["prompt_pack_index"]]
-    kit = AUTOMATION_KITS[bundle["automation_kit_index"]]
+def build_bundle_blueprints() -> List[Dict[str, Any]]:
+    # Core thesis: premium bundle = prompt pack + automation kit that compliment each other
+    return [
+        {
+            "bundleName": "Creator Growth Engine Bundle",
+            "niche": "creators",
+            "promptPack": {
+                "title": "Content Hooks + Angle Matrix Prompt Pack",
+                "productType": "prompt_pack",
+                "description": "A curated prompt pack to generate high-retention hooks, angles, and thumbnails ideas across niches.",
+                "deliverable": "prompts_md",
+            },
+            "automationKit": {
+                "title": "Notion Content OS + Weekly Planning Automation Kit",
+                "productType": "automation_kit",
+                "description": "A Notion workspace + automation checklist to plan, draft, and publish content consistently.",
+                "deliverable": "notion_template_link + checklist_pdf",
+            },
+        },
+        {
+            "bundleName": "E-commerce Lifecycle Revenue Bundle",
+            "niche": "ecommerce",
+            "promptPack": {
+                "title": "Email + SMS Copy Prompt Pack (Lifecycle)",
+                "productType": "prompt_pack",
+                "description": "Prompts to generate welcome, abandoned cart, post-purchase, winback, and upsell flows.",
+                "deliverable": "prompts_md",
+            },
+            "automationKit": {
+                "title": "Lifecycle Flows Automation Kit (Klaviyo-ready)",
+                "productType": "automation_kit",
+                "description": "Flow maps, segmentation rules, and plug-and-play templates for lifecycle revenue.",
+                "deliverable": "flow_maps_pdf + templates_txt",
+            },
+        },
+        {
+            "bundleName": "Agency Client Acquisition Bundle",
+            "niche": "agencies",
+            "promptPack": {
+                "title": "Outbound Messaging Prompt Pack (Cold + Warm)",
+                "productType": "prompt_pack",
+                "description": "Prompts for personalized cold outreach, follow-ups, and objection handling.",
+                "deliverable": "prompts_md",
+            },
+            "automationKit": {
+                "title": "Lead Intake + Proposal Automation Kit",
+                "productType": "automation_kit",
+                "description": "Client intake form blueprint + proposal generator structure + follow-up system.",
+                "deliverable": "templates_doc + checklist_pdf",
+            },
+        },
+        {
+            "bundleName": "AI Art Business Bundle",
+            "niche": "ai_art",
+            "promptPack": {
+                "title": "Cyber-Noir Visual Prompt Pack (V6)",
+                "productType": "prompt_pack",
+                "description": "High-quality prompts for consistent cyber-noir outputs across scenes, characters, and styles.",
+                "deliverable": "prompts_md",
+            },
+            "automationKit": {
+                "title": "Listing + Upsell Automation Kit (Digital Storefront)",
+                "productType": "automation_kit",
+                "description": "Templates and workflow to list digital packs, bundle offers, and upsells.",
+                "deliverable": "workflow_pdf + templates_txt",
+            },
+        },
+    ]
 
-    # High AOV bundle pricing
-    price = round(random.choice([129.00, 179.00, 249.00, 299.00, 399.00]), 2)
 
-    hook = random.choice(SECRET_HOOKS)
-    niche = random.choice(NICHES)
+def make_bundle_doc(blueprint: Dict[str, Any]) -> Dict[str, Any]:
+    bundle_title = blueprint["bundleName"]
+    bundle_price = _pricing_for("bundle")
 
-    title = f"{bundle['title']} ({niche})"
-    description = (
-        f"{hook}. This is a paired bundle: one prompt pack + one automation kit that reinforce each other. "
-        "Digital-only. Instant download. Scarcity-style offer copy included."
-    )
+    prompt_title = blueprint["promptPack"]["title"]
+    kit_title = blueprint["automationKit"]["title"]
 
-    metrics = estimate_metrics("bundle", price)
-
-    digital_content = (
-        "BUNDLE CONTENTS:\n\n"
-        f"1) PROMPT PACK: {prompt_pack['base_title']}\n"
-        f"{prompt_pack['digital_content']}\n\n"
-        f"2) AUTOMATION KIT: {kit['base_title']}\n"
-        f"{kit['digital_content']}\n\n"
-        "BONUS:\n"
-        "- Limited-time scarcity copy pack\n"
-        "- 'Secrets they don't want you to know' hook variants\n"
-    )
-
-    image_prompt = (
-        "Premium bundle cover design, dark luxury tech theme, "
-        "electric purple accent, 'Bundle' label, modern ecommerce hero image, "
-        "clean typography, digital product packaging"
-    )
+    seed_key = _slug_hash(f"{bundle_title}|{prompt_title}|{kit_title}|{RUN_SALT}")
 
     return {
-        "title": title,
-        "description": description,
+        # Identity / routing
+        "status": "pending",
+        "deliveryType": "digital",
         "productType": "bundle",
-        "deliveryType": DELIVERY_TYPE,
-        "price": price,
-        "currency": CURRENCY,
-        "tags": list(set(bundle["tags"] + [niche, "digital"])),
-        "marketingHooks": [hook, "Bundle-only pricing", "Only chance to grab this combo"],
-        "bundleComponents": [
-            {"type": "prompt_pack", "title": prompt_pack["base_title"]},
-            {"type": "automation_kit", "title": kit["base_title"]},
-        ],
-        "imagePrompt": image_prompt,
-        "digitalContent": digital_content,
-        **metrics,
+        "collection": "ghost_digital",
+        "seedKey": seed_key,
+
+        # Merchandising
+        "title": bundle_title,
+        "subtitle": f"Prompt Pack + Automation Kit ({blueprint['niche']})",
+        "description": (
+            f"A premium bundle pairing:\n"
+            f"1) {prompt_title}\n"
+            f"2) {kit_title}\n\n"
+            f"Designed to ship fast and sell high. Digital-only."
+        ),
+        "hooks": _hooks(),
+
+        # Bundle composition
+        "bundle": {
+            "components": [
+                {
+                    "productType": blueprint["promptPack"]["productType"],
+                    "title": prompt_title,
+                    "description": blueprint["promptPack"]["description"],
+                    "deliverable": blueprint["promptPack"]["deliverable"],
+                },
+                {
+                    "productType": blueprint["automationKit"]["productType"],
+                    "title": kit_title,
+                    "description": blueprint["automationKit"]["description"],
+                    "deliverable": blueprint["automationKit"]["deliverable"],
+                },
+            ],
+            "bundleStrategy": "complimentary_pair",
+        },
+
+        # Pricing
+        "price": bundle_price,
+        "currency": "USD",
+
+        # Image placeholders for now
+        "imageUrl": _digital_image_placeholder(bundle_title),
+        "imagePrompt": f"Modern premium digital product cover for '{bundle_title}', minimal, dark navy, electric accent, no physical objects.",
+
+        # Metrics (heuristics; tune later)
+        "metrics": {
+            "profitability_range_usd": [round(bundle_price * 0.85, 2), round(bundle_price * 0.98, 2)],
+            "expected_shelf_life_days": random.choice([14, 21, 30, 45]),
+            "demand_signal": random.choice(["med", "med_high", "high"]),
+            "confidence": "low",
+        },
+
+        # Timestamps
+        "createdAt": _now(),
+        "updatedAt": _now(),
+        "source": "oracle_brain_py",
+        "version": "2.0.0",
     }
 
 
-def generate_product():
-    product_type = weighted_choice(PRODUCT_TYPE_WEIGHTS)
-    if product_type == "bundle":
-        return build_bundle()
-    if product_type == "automation_kit":
-        return build_automation_kit()
-    return build_prompt_pack()
+def make_single_doc(kind: str) -> Dict[str, Any]:
+    # Singles are still digital, but we prefer bundles
+    ideas = {
+        "prompt_pack": [
+            ("Hook Formula Prompt Pack", "Prompts to generate hooks that stop the scroll across niches."),
+            ("High-Converting Landing Page Prompt Pack", "Prompts for headlines, offers, positioning, and FAQs."),
+            ("Short-Form Script Prompt Pack", "Prompts to generate 30-90s scripts with CTAs."),
+        ],
+        "automation_kit": [
+            ("Client Onboarding Automation Kit", "Templates + workflow for onboarding clients with less back-and-forth."),
+            ("Email Sequence Automation Kit", "Template pack + flow map to ship lifecycle emails fast."),
+            ("Notion Business OS Kit", "A digital system to run tasks, pipeline, and knowledge in one place."),
+        ],
+    }
+
+    title, desc = random.choice(ideas[kind])
+    price = _pricing_for(kind)
+    seed_key = _slug_hash(f"{kind}|{title}|{RUN_SALT}")
+
+    return {
+        "status": "pending",
+        "deliveryType": "digital",
+        "productType": kind,
+        "collection": "ghost_digital",
+        "seedKey": seed_key,
+
+        "title": title,
+        "description": desc + " Digital-only. Instant delivery.",
+        "hooks": _hooks(),
+
+        "price": price,
+        "currency": "USD",
+
+        "imageUrl": _digital_image_placeholder(title),
+        "imagePrompt": f"Premium digital product cover for '{title}', minimal, dark navy, electric accent, no physical objects.",
+
+        "metrics": {
+            "profitability_range_usd": [round(price * 0.85, 2), round(price * 0.98, 2)],
+            "expected_shelf_life_days": random.choice([10, 14, 21, 30]),
+            "demand_signal": random.choice(["med", "med_high"]),
+            "confidence": "low",
+        },
+
+        "createdAt": _now(),
+        "updatedAt": _now(),
+        "source": "oracle_brain_py",
+        "version": "2.0.0",
+    }
+
+
+def upsert_if_new(db, collection_name: str, doc_data: Dict[str, Any]) -> bool:
+    """
+    Prevent spam duplicates. If a doc with same seedKey exists and is not archived, skip creation.
+    """
+    seed_key = doc_data.get("seedKey")
+    if not seed_key:
+        return True  # no seedKey -> allow
+
+    existing = (
+        db.collection(collection_name)
+        .where("seedKey", "==", seed_key)
+        .where("status", "in", ["pending", "draft", "ready_for_shopify"])
+        .limit(1)
+        .get()
+    )
+    if existing:
+        print(f"[Oracle] ⏭️ Skipping duplicate seedKey={seed_key} (already active).")
+        return False
+
+    db.collection(collection_name).add(doc_data)
+    print(f"[Oracle] ✅ Created product: {doc_data.get('title')} (type={doc_data.get('productType')})")
+    return True
+
+
+def generate_products(db, collection_name: str, count: int):
+    blueprints = build_bundle_blueprints()
+
+    created = 0
+    attempts = 0
+    max_attempts = max(10, count * 5)
+
+    while created < count and attempts < max_attempts:
+        attempts += 1
+
+        if random.random() < BUNDLE_WEIGHT:
+            bp = random.choice(blueprints)
+            doc_data = make_bundle_doc(bp)
+        else:
+            kind = random.choice(["prompt_pack", "automation_kit"])
+            doc_data = make_single_doc(kind)
+
+        if upsert_if_new(db, collection_name, doc_data):
+            created += 1
+
+    print(f"[Oracle] Done. Created {created}/{count} products.")
 
 
 def main():
-    print("=================================")
-    print("         ORACLE (brain.py)       ")
-    print("=================================")
+    print(f"[Oracle] brain.py started at {_now().isoformat()}")
+    print(f"[Oracle] Target collection: {DEFAULT_COLLECTION}")
+    print(f"[Oracle] Create count: {ORACLE_CREATE_COUNT} | Bundle weight: {BUNDLE_WEIGHT} | Tone: {MARKETING_TONE}")
 
     db = initialize_firebase()
-    if db is None:
+    if not db:
+        print("[Oracle] Firestore client unavailable. Exiting with error.")
         raise SystemExit(1)
 
-    product = generate_product()
+    generate_products(db, DEFAULT_COLLECTION, ORACLE_CREATE_COUNT)
 
-    now = datetime.now(timezone.utc)
-    product_doc = {
-        **product,
-        "status": "pending",
-        "createdAt": now.isoformat(),
-        "updatedAt": now.isoformat(),
-        # Helpful for downstream state machines / debugging:
-        "source": "oracle",
-        "version": "2.0-digital-only-bundle-heavy",
-    }
-
-    doc_ref = db.collection(COLLECTION).document()
-    doc_ref.set(product_doc)
-
-    print(f"[Oracle] ✅ Created product {doc_ref.id}")
-    print(f"[Oracle]    type={product_doc['productType']} price={product_doc['price']} status=pending")
+    print(f"[Oracle] brain.py finished at {_now().isoformat()}")
 
 
 if __name__ == "__main__":
