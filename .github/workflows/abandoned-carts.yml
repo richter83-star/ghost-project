@@ -8,6 +8,8 @@ on:
 jobs:
   recover-carts:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Trigger Abandoned Cart Recovery
         run: |
