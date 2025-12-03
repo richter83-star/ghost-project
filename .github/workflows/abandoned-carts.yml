@@ -1,0 +1,15 @@
+name: Abandoned Cart Recovery
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  recover-carts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Abandoned Cart Recovery
+        run: |
+          curl -X GET "https://your-domain.com/api/cron/abandoned-carts" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

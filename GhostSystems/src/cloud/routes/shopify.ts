@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
+import rateLimit from 'express-rate-limit';
 import { fetchProductMetafield } from '../../lib/shopify.js';
 
 const router = express.Router();
@@ -8,6 +9,16 @@ const router = express.Router();
 const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@example.com';
+
+// Rate limiting for webhook endpoint
+// Allow 100 requests per 15 minutes per IP (Shopify typically sends 1-2 per order)
+const webhookRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many webhook requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 
 /**
  * Verify Shopify webhook signature
@@ -92,6 +103,7 @@ async function sendEmail(
  */
 router.post(
   '/order-paid',
+  webhookRateLimiter, // Rate limiting middleware
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     // Verify webhook signature

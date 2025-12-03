@@ -9,18 +9,44 @@ import admin from 'firebase-admin';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- Firebase bootstrap using service account JSON ---
+// ===============================
+// Hard rules (curation gate)
+// ===============================
+const ALLOWED_TYPES = new Set(['prompt_pack', 'automation_kit', 'bundle']);
+
+// Treat these as “digital only” booleans across legacy/new docs
+function isDigitalOnly(data) {
+  return data?.digitalOnly === true || data?.digital_only === true;
+}
+
+function shouldProcess(data) {
+  const type = data?.productType || data?.product_type;
+  if (!ALLOWED_TYPES.has(type)) return { ok: false, reason: `blocked_type:${type || 'missing'}` };
+  if (!isDigitalOnly(data)) return { ok: false, reason: `not_digital_only` };
+  return { ok: true };
+}
+
+// --- Firebase bootstrap using service account JSON file ---
 function initFirebase() {
+  // Note: firebase-admin uses admin.apps (array)
   if (admin.apps && admin.apps.length > 0) {
     return admin.app();
   }
 
-  const serviceAccountPath =
-    process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './your-service-account-key.json';
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (!serviceAccountPath) {
+    throw new Error(
+      'Missing FIREBASE_SERVICE_ACCOUNT_PATH. In Render, point it to your Secret File path, e.g. /etc/secrets/KEY_HOME'
+    );
+  }
 
   const resolvedPath = path.isAbsolute(serviceAccountPath)
     ? serviceAccountPath
     : path.join(__dirname, serviceAccountPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Service account file not found at: ${resolvedPath}`);
+  }
 
   const serviceAccountJson = fs.readFileSync(resolvedPath, 'utf8');
   const serviceAccount = JSON.parse(serviceAccountJson);
@@ -37,9 +63,13 @@ async function processDraftProducts() {
   const app = initFirebase();
   const db = app.firestore();
 
+  // Prefer the correct name, but keep backwards compatibility
   const collectionName =
-    process.env.FIRESTORE_JOBS_COLLECTION || 'products'; // your env already set to "products"
+    process.env.FIRESTORE_PRODUCTS_COLLECTION ||
+    process.env.FIRESTORE_JOBS_COLLECTION ||
+    'products';
 
+  // NOTE: your system uses lowercase statuses: pending -> draft -> ready_for_shopify
   const snapshot = await db
     .collection(collectionName)
     .where('status', '==', 'draft')
@@ -52,23 +82,53 @@ async function processDraftProducts() {
 
   console.log(`[Pipeline] Found ${snapshot.size} DRAFT products to process.`);
 
+  let moved = 0;
+  let skipped = 0;
+
   for (const doc of snapshot.docs) {
     const data = doc.data();
     const id = doc.id;
 
-    console.log(`[Pipeline] (a) Processing DRAFT product ${id} - "${data.title}"`);
+    // ✅ CURATION GATE: only digital AI goods, only allowed types
+    const verdict = shouldProcess(data);
+    if (!verdict.ok) {
+      skipped++;
+      console.log(
+        `[Pipeline] ⏭️ Skipping ${id} "${data?.title || 'Untitled'}" (${verdict.reason})`
+      );
 
-    // TODO: hook in Gemini / Imagen / Shopify here.
-    // For now we just move it along the pipeline safely.
+      // Optional: quarantine junk so it stops clogging the pipe
+      await doc.ref.update({
+        status: 'archived_junk',
+        skipReason: verdict.reason,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      continue;
+    }
+
+    const productType = data.productType || data.product_type;
+    console.log(
+      `[Pipeline] (a) Processing DRAFT ${productType} ${id} - "${data.title}"`
+    );
+
+    // Bundle-aware flags for the next stage (Shopify publish)
+    const isBundle = productType === 'bundle';
+
+    // TODO: hook in Gemini / image gen / Shopify here.
+    // For now move forward safely.
     await doc.ref.update({
       status: 'ready_for_shopify',
+      requiresBundleAssembly: isBundle, // Shopify stage can use this
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+    moved++;
     console.log(
-      `[Pipeline] (b) Moved product ${id} -> status = "ready_for_shopify".`
+      `[Pipeline] (b) Moved ${id} -> status="ready_for_shopify"${isBundle ? ' (bundle)' : ''}.`
     );
   }
+
+  console.log(`[Pipeline] ✅ Done. moved=${moved} skipped=${skipped}`);
 }
 
 (async () => {

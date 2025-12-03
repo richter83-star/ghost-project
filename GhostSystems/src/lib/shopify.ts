@@ -130,6 +130,33 @@ export async function fetchCustomers() {
 }
 
 /**
+ * Validate and sanitize input parameters to prevent SSRF
+ */
+function validateProductId(productId: string): boolean {
+  // Shopify product IDs are numeric strings
+  // Reject anything that's not a positive integer
+  if (!productId || typeof productId !== 'string') {
+    return false;
+  }
+  // Must be numeric only, no special characters
+  const numericRegex = /^\d+$/;
+  return numericRegex.test(productId.trim());
+}
+
+function sanitizeString(input: string, maxLength: number = 100): string | null {
+  if (!input || typeof input !== 'string') {
+    return null;
+  }
+  // Remove any potentially dangerous characters
+  // Allow alphanumeric, underscore, dash, dot
+  const sanitized = input.trim().replace(/[^a-zA-Z0-9._-]/g, '');
+  if (sanitized.length === 0 || sanitized.length > maxLength) {
+    return null;
+  }
+  return sanitized;
+}
+
+/**
  * Fetch product metafields
  * Used for digital goods delivery
  */
@@ -138,17 +165,42 @@ export async function fetchProductMetafield(
   namespace: string = 'digital_goods',
   key: string = 'content'
 ) {
-  try {
-    const response = await axios.get(
-      `${BASE_URL}/products/${productId}/metafields.json?namespace=${namespace}&key=${key}`,
-      {
-        headers: getHeaders(),
-      }
+  // Validate productId to prevent SSRF
+  if (!validateProductId(productId)) {
+    console.error(
+      `[Shopify] Invalid product ID format: ${productId}. Rejecting request.`
     );
+    return null;
+  }
+
+  // Sanitize namespace and key parameters
+  const sanitizedNamespace = sanitizeString(namespace, 50);
+  const sanitizedKey = sanitizeString(key, 50);
+
+  if (!sanitizedNamespace || !sanitizedKey) {
+    console.error(
+      '[Shopify] Invalid namespace or key format. Rejecting request.'
+    );
+    return null;
+  }
+
+  try {
+    // Use encodeURIComponent for URL parameters to prevent injection
+    const url = `${BASE_URL}/products/${encodeURIComponent(
+      productId.trim()
+    )}/metafields.json?namespace=${encodeURIComponent(
+      sanitizedNamespace
+    )}&key=${encodeURIComponent(sanitizedKey)}`;
+
+    const response = await axios.get(url, {
+      headers: getHeaders(),
+    });
 
     const metafields = response.data.metafields || [];
+    // Use sanitized values for comparison
     const metafield = metafields.find(
-      (mf: any) => mf.namespace === namespace && mf.key === key
+      (mf: any) =>
+        mf.namespace === sanitizedNamespace && mf.key === sanitizedKey
     );
 
     return metafield?.value || null;
