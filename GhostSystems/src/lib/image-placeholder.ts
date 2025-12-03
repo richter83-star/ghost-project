@@ -95,14 +95,18 @@ export function getGenericPlaceholderUrl(title: string, productType: string): st
 
 /**
  * Get best available placeholder image URL
- * Tries Unsplash first, falls back to generic placeholder
+ * Uses a reliable image service that Shopify accepts
  */
-export function getBestPlaceholderImage(title: string, productType: string): string {
-  try {
-    return getPlaceholderImageUrl(title, productType);
-  } catch (error) {
-    console.warn('[Placeholder] Failed to generate Unsplash URL, using generic:', error);
-    return getGenericPlaceholderUrl(title, productType);
-  }
+export function getBestPlaceholderImage(title?: string, productType?: string): string {
+  // Use Picsum Photos - reliable, fast, and Shopify-compatible
+  // Returns actual images that Shopify can fetch and cache
+  const width = 800;
+  const height = 800;
+  
+  // Use a seed based on title to get consistent images per product
+  const seed = title ? hashString(title) : Math.floor(Math.random() * 1000);
+  
+  // Picsum Photos with seed for consistency
+  return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
 

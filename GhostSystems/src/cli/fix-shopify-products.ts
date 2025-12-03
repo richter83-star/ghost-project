@@ -38,6 +38,7 @@ async function fixVariantInventory(variantId: string, productId: string): Promis
           id: variantId,
           inventory_management: null, // Don't track inventory
           inventory_policy: 'continue', // Allow purchases
+          inventory_quantity: null, // Clear quantity
         },
       },
       { headers: getHeaders() }
@@ -45,6 +46,39 @@ async function fixVariantInventory(variantId: string, productId: string): Promis
     console.log(`  ✅ Fixed inventory for variant ${variantId}`);
   } catch (error: any) {
     console.error(`  ❌ Failed to fix variant ${variantId}:`, error.message);
+    if (error.response?.data) {
+      console.error(`  📋 Error details:`, JSON.stringify(error.response.data, null, 2));
+    }
+  }
+}
+
+/**
+ * Update product category/type
+ */
+async function updateProductCategory(productId: string, productType: string): Promise<void> {
+  try {
+    // Map product types to Shopify-friendly categories
+    const categoryMap: Record<string, string> = {
+      'prompt_pack': 'Digital Artwork',
+      'automation_kit': 'Digital Services',
+      'bundle': 'Digital Bundle',
+    };
+    
+    const category = categoryMap[productType] || 'Digital Goods';
+    
+    const response = await axios.put(
+      `${BASE_URL}/products/${productId}.json`,
+      {
+        product: {
+          id: productId,
+          product_type: category,
+        },
+      },
+      { headers: getHeaders() }
+    );
+    console.log(`  ✅ Updated category to: ${category}`);
+  } catch (error: any) {
+    console.error(`  ❌ Failed to update category:`, error.message);
   }
 }
 
@@ -114,6 +148,7 @@ async function main() {
     let fixedInventory = 0;
     let improvedDescriptions = 0;
     let addedImages = 0;
+    let fixedCategories = 0;
 
     for (const product of products) {
       console.log(`\n📦 ${product.title} (ID: ${product.id})`);
@@ -121,11 +156,27 @@ async function main() {
       // Fix inventory for all variants
       if (product.variants && product.variants.length > 0) {
         for (const variant of product.variants) {
-          if (variant.inventory_management === 'shopify' || variant.inventory_policy === 'deny') {
+          if (variant.inventory_management === 'shopify' || variant.inventory_policy === 'deny' || variant.inventory_management !== null) {
             await fixVariantInventory(variant.id, product.id);
             fixedInventory++;
           }
         }
+      }
+
+      // Fix category if missing or generic
+      const productType = product.product_type || '';
+      if (!productType || productType === 'Digital Goods' || productType.length < 3) {
+        // Try to infer from title or set default
+        let inferredType = 'Digital Artwork';
+        if (product.title?.toLowerCase().includes('prompt')) {
+          inferredType = 'Digital Artwork';
+        } else if (product.title?.toLowerCase().includes('automation') || product.title?.toLowerCase().includes('kit')) {
+          inferredType = 'Digital Services';
+        } else if (product.title?.toLowerCase().includes('bundle')) {
+          inferredType = 'Digital Bundle';
+        }
+        await updateProductCategory(product.id, inferredType);
+        fixedCategories++;
       }
 
       // Check and improve description
@@ -155,11 +206,17 @@ async function main() {
         console.log(`  ⚠️  No images found, adding placeholder...`);
         try {
           const placeholderUrl = getBestPlaceholderImage(product.title, product.product_type || 'digital');
+          console.log(`  📷 Attempting to add image: ${placeholderUrl.substring(0, 50)}...`);
           await addProductImage(product.id, placeholderUrl);
           console.log(`  ✅ Added placeholder image`);
           addedImages++;
+          // Wait a bit to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 500));
         } catch (error: any) {
           console.error(`  ❌ Failed to add image:`, error.message);
+          if (error.response?.data) {
+            console.error(`  📋 Error details:`, JSON.stringify(error.response.data, null, 2));
+          }
         }
       } else {
         console.log(`  ✅ Has ${product.images.length} image(s)`);
@@ -171,10 +228,12 @@ async function main() {
     console.log(`  ✅ Fixed inventory: ${fixedInventory} variants (products now available)`);
     console.log(`  ✅ Added images: ${addedImages} products (placeholder images)`);
     console.log(`  ✅ Improved descriptions: ${improvedDescriptions} products (AI-generated)`);
+    console.log(`  ✅ Fixed categories: ${fixedCategories} products`);
     console.log('\n✅ Done! Your products should now:');
     console.log('   - Show as available (not "sold out")');
     console.log('   - Have placeholder images');
     console.log('   - Have detailed, AI-generated descriptions');
+    console.log('   - Have proper categories set');
 
   } catch (error: any) {
     console.error('❌ Error:', error.message);
