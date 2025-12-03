@@ -5,7 +5,7 @@ services:
     plan: free              # or starter / pro if you upgrade later
     rootDir: ./             # tells Render to build from repo root
     buildCommand: npm install
-    startCommand: npx tsx src/server.ts
+    startCommand: npm start
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -59,11 +59,12 @@ services:
         sync: false
 
   # Optional background cron-runner (comment out if not needed)
-  - type: worker
-    name: ghostsystems-cron
-    env: node
-    rootDir: ./
-    buildCommand: npm install
-    startCommand: npx tsx src/cloud/runner.ts
-    autoDeploy: true
+  # All functionality is now in the main web service (ghostsystems)
+  # - type: worker
+  #   name: ghostsystems-cron
+  #   env: node
+  #   rootDir: ./
+  #   buildCommand: npm install
+  #   startCommand: npm start
+  #   autoDeploy: true
 
