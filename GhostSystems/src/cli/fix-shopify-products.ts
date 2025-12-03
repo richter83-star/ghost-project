@@ -12,6 +12,7 @@ import axios from 'axios';
 import { fetchProducts } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
 import { generateDescription } from '../lib/gemini.js';
+import { Readable } from 'stream';
 
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
@@ -24,6 +25,19 @@ function getHeaders() {
     'Content-Type': 'application/json',
     'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
   };
+}
+
+/**
+ * Hash string to create consistent image selection
+ */
+function hashString(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash) % 1000;
 }
 
 /**
@@ -113,10 +127,66 @@ async function updateDescription(productId: string, description: string): Promis
 }
 
 /**
- * Add image to product
+ * Download image from URL and convert to base64
+ */
+async function downloadImageAsBase64(imageUrl: string): Promise<string> {
+  try {
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
+    });
+    
+    const buffer = Buffer.from(response.data, 'binary');
+    const base64 = buffer.toString('base64');
+    const contentType = response.headers['content-type'] || 'image/jpeg';
+    
+    // Return data URI format
+    return `data:${contentType};base64,${base64}`;
+  } catch (error: any) {
+    console.error(`  ⚠️  Failed to download image: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Add image to product using base64 upload (more reliable)
  */
 async function addProductImage(productId: string, imageUrl: string): Promise<void> {
   try {
+    // First, try downloading the image and uploading as base64
+    let imageData;
+    try {
+      console.log(`  📥 Downloading image from: ${imageUrl.substring(0, 50)}...`);
+      const base64Image = await downloadImageAsBase64(imageUrl);
+      
+      // Extract content type and base64 data
+      const matches = base64Image.match(/^data:([^;]+);base64,(.+)$/);
+      if (matches) {
+        const contentType = matches[1];
+        const base64Data = matches[2];
+        
+        // Upload using base64 attachment (more reliable)
+        const response = await axios.post(
+          `${BASE_URL}/products/${productId}/images.json`,
+          {
+            image: {
+              attachment: base64Data,
+              filename: `product-${productId}.jpg`,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        
+        if (response.data?.image?.id) {
+          console.log(`  ✅ Added image to product (base64 upload)`);
+          return;
+        }
+      }
+    } catch (downloadError: any) {
+      console.log(`  ⚠️  Base64 upload failed, trying direct URL: ${downloadError.message}`);
+    }
+    
+    // Fallback: Try direct URL method
     const response = await axios.post(
       `${BASE_URL}/products/${productId}/images.json`,
       {
@@ -126,9 +196,15 @@ async function addProductImage(productId: string, imageUrl: string): Promise<voi
       },
       { headers: getHeaders() }
     );
-    console.log(`  ✅ Added image to product`);
+    
+    if (response.data?.image?.id) {
+      console.log(`  ✅ Added image to product (URL upload)`);
+    } else {
+      throw new Error('Image upload succeeded but no image ID returned');
+    }
   } catch (error: any) {
-    console.error(`  ❌ Failed to add image:`, error.message);
+    const errorDetails = error.response?.data || error.message;
+    console.error(`  ❌ Failed to add image:`, typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails, null, 2));
     throw error;
   }
 }
@@ -204,18 +280,39 @@ async function main() {
       // Check and fix images
       if (!product.images || product.images.length === 0) {
         console.log(`  ⚠️  No images found, adding placeholder...`);
-        try {
-          const placeholderUrl = getBestPlaceholderImage(product.title, product.product_type || 'digital');
-          console.log(`  📷 Attempting to add image: ${placeholderUrl.substring(0, 50)}...`);
-          await addProductImage(product.id, placeholderUrl);
-          console.log(`  ✅ Added placeholder image`);
-          addedImages++;
-          // Wait a bit to avoid rate limits
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error: any) {
-          console.error(`  ❌ Failed to add image:`, error.message);
-          if (error.response?.data) {
-            console.error(`  📋 Error details:`, JSON.stringify(error.response.data, null, 2));
+        let imageAdded = false;
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        // Try multiple placeholder services if one fails
+        const placeholderServices = [
+          () => getBestPlaceholderImage(product.title, product.product_type || 'digital'),
+          () => `https://picsum.photos/seed/${hashString(product.title)}/800/800`,
+          () => `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=800&fit=crop`,
+        ];
+        
+        while (!imageAdded && attempts < maxAttempts) {
+          try {
+            const placeholderUrl = placeholderServices[attempts]();
+            console.log(`  📷 Attempt ${attempts + 1}/${maxAttempts}: Adding image...`);
+            await addProductImage(product.id, placeholderUrl);
+            console.log(`  ✅ Successfully added image`);
+            addedImages++;
+            imageAdded = true;
+            // Wait a bit to avoid rate limits
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error: any) {
+            attempts++;
+            console.error(`  ❌ Attempt ${attempts} failed:`, error.message);
+            if (error.response?.data) {
+              console.error(`  📋 Error details:`, JSON.stringify(error.response.data, null, 2));
+            }
+            if (attempts < maxAttempts) {
+              console.log(`  🔄 Trying next method...`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } else {
+              console.error(`  ❌ All image upload attempts failed for this product`);
+            }
           }
         }
       } else {
