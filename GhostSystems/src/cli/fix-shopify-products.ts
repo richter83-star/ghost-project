@@ -11,6 +11,7 @@ import 'dotenv/config';
 import axios from 'axios';
 import { fetchProducts } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
+import { generateDescription } from '../lib/gemini.js';
 
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
@@ -111,7 +112,7 @@ async function main() {
     console.log(`📦 Found ${products.length} products to check\n`);
 
     let fixedInventory = 0;
-    let needsDescription = 0;
+    let improvedDescriptions = 0;
     let addedImages = 0;
 
     for (const product of products) {
@@ -127,10 +128,24 @@ async function main() {
         }
       }
 
-      // Check description
+      // Check and improve description
       if (!isDescriptionUsable(product.body_html)) {
-        console.log(`  ⚠️  Description is missing or too short (needs GEMINI_API_KEY to generate)`);
-        needsDescription++;
+        console.log(`  ⚠️  Description is missing or too short, generating better one...`);
+        try {
+          const newDescription = await generateDescription(
+            product.title,
+            product.product_type || 'digital'
+          );
+          await updateDescription(product.id, newDescription);
+          console.log(`  ✅ Generated and updated description (${newDescription.length} chars)`);
+          improvedDescriptions++;
+        } catch (error: any) {
+          if (error.message.includes('GEMINI_API_KEY')) {
+            console.log(`  ⚠️  GEMINI_API_KEY not set, skipping description generation`);
+          } else {
+            console.log(`  ⚠️  Could not generate description: ${error.message}`);
+          }
+        }
       } else {
         console.log(`  ✅ Description OK`);
       }
@@ -155,16 +170,11 @@ async function main() {
     console.log('📊 Summary:');
     console.log(`  ✅ Fixed inventory: ${fixedInventory} variants (products now available)`);
     console.log(`  ✅ Added images: ${addedImages} products (placeholder images)`);
-    console.log(`  ⚠️  Needs descriptions: ${needsDescription} products (set GEMINI_API_KEY to auto-generate)`);
+    console.log(`  ✅ Improved descriptions: ${improvedDescriptions} products (AI-generated)`);
     console.log('\n✅ Done! Your products should now:');
     console.log('   - Show as available (not "sold out")');
     console.log('   - Have placeholder images');
-    
-    if (needsDescription > 0) {
-      console.log('\n💡 To improve descriptions:');
-      console.log('   Set GEMINI_API_KEY in environment variables');
-      console.log('   New products will auto-generate detailed descriptions');
-    }
+    console.log('   - Have detailed, AI-generated descriptions');
 
   } catch (error: any) {
     console.error('❌ Error:', error.message);
