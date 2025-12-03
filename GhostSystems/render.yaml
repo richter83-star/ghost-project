@@ -74,6 +74,10 @@ services:
       - key: ADAPTIVE_AI_MAX_PRODUCTS
         value: '5'
         sync: false
+      # Curation level: strict (very selective), default (balanced), or relaxed (more products)
+      - key: ADAPTIVE_AI_CURATION_LEVEL
+        value: 'default'
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   # All functionality is now in the main web service (ghostsystems)

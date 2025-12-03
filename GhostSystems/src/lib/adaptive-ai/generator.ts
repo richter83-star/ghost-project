@@ -9,6 +9,13 @@
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { generateMarketInsights, MarketInsights, NichePerformance } from './analytics.js';
 import { generateDescription } from '../gemini.js';
+import {
+  shouldGenerateProduct,
+  getDefaultCurationRules,
+  getStrictCurationRules,
+  getRelaxedCurationRules,
+  CurationRules,
+} from './curation.js';
 
 interface ProductGenerationStrategy {
   productType: 'prompt_pack' | 'automation_kit' | 'bundle';
@@ -294,7 +301,23 @@ export async function generateProduct(
 }
 
 /**
- * Generates and saves products to Firestore
+ * Get curation rules based on environment configuration
+ */
+function getCurationRules(): CurationRules {
+  const curationLevel = process.env.ADAPTIVE_AI_CURATION_LEVEL || 'default';
+  
+  switch (curationLevel.toLowerCase()) {
+    case 'strict':
+      return getStrictCurationRules();
+    case 'relaxed':
+      return getRelaxedCurationRules();
+    default:
+      return getDefaultCurationRules();
+  }
+}
+
+/**
+ * Generates and saves products to Firestore with curation controls
  */
 export async function generateAndSaveProducts(
   count: number = 3,
@@ -302,12 +325,17 @@ export async function generateAndSaveProducts(
 ): Promise<string[]> {
   console.log(`[AdaptiveAI] 🧠 Generating ${count} products based on market insights...`);
 
+  // Get curation rules
+  const curationRules = getCurationRules();
+  console.log(`[AdaptiveAI] 🎨 Curation mode: ${process.env.ADAPTIVE_AI_CURATION_LEVEL || 'default'}`);
+  console.log(`[AdaptiveAI] 🎨 Min confidence: ${(curationRules.minConfidence * 100).toFixed(0)}%, Max per day: ${curationRules.maxProductsPerDay}`);
+
   // Get market insights
   const insights = await generateMarketInsights(collectionName);
   console.log(`[AdaptiveAI] ✅ Analyzed ${insights.topPerformingProducts.length} products`);
 
-  // Generate strategies
-  const strategies = await generateStrategies(insights, count);
+  // Generate strategies (generate more than needed since some will be filtered)
+  const strategies = await generateStrategies(insights, count * 2); // Generate 2x to account for filtering
   console.log(`[AdaptiveAI] 📊 Generated ${strategies.length} strategies`);
 
   if (strategies.length === 0) {
@@ -316,19 +344,52 @@ export async function generateAndSaveProducts(
     return [];
   }
 
-  // Generate products
+  // Generate products with curation checks
   const db = getFirestore();
   const createdIds: string[] = [];
 
   for (const strategy of strategies) {
+    // Stop if we've reached the desired count
+    if (createdIds.length >= count) {
+      break;
+    }
+
     try {
+      // Check confidence threshold first (fast check)
+      if (strategy.confidence < curationRules.minConfidence) {
+        console.log(
+          `[AdaptiveAI] ⏭️ Skipping: Confidence ${(strategy.confidence * 100).toFixed(0)}% ` +
+          `below minimum ${(curationRules.minConfidence * 100).toFixed(0)}%`
+        );
+        continue;
+      }
+
+      // Generate the product first (we need the title for duplicate checking)
       const product = await generateProduct(strategy);
+      
+      // Apply all curation rules now that we have the full product
+      const curationCheck = await shouldGenerateProduct(
+        product.productType,
+        product.niche,
+        product.title,
+        strategy.confidence,
+        curationRules,
+        collectionName
+      );
+
+      if (!curationCheck.allowed) {
+        console.log(`[AdaptiveAI] ⏭️ Skipping: ${curationCheck.reason}`);
+        continue;
+      }
+
+      // Determine status based on curation rules
+      const status = curationRules.requireManualReview ? 'pending_review' : 'pending';
       
       // Create Firestore document
       const docRef = db.collection(collectionName).doc();
       await docRef.set({
         ...product,
-        status: 'pending',
+        status,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
         is_digital: true,
@@ -336,12 +397,14 @@ export async function generateAndSaveProducts(
         requires_shipping: false,
         requiresShipping: false,
         currency: 'USD',
+        dedupe_key: product.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').substring(0, 50), // For future duplicate checking
       });
 
       createdIds.push(docRef.id);
+      const statusLabel = status === 'pending_review' ? ' (needs review)' : '';
       console.log(
-        `[AdaptiveAI] ✅ Created product: "${product.title}" ` +
-        `(${product.productType}, ${product.niche}, $${product.price_usd}, ` +
+        `[AdaptiveAI] ✅ Created product: "${product.title}"` + statusLabel +
+        ` (${product.productType}, ${product.niche}, $${product.price_usd}, ` +
         `confidence: ${(strategy.confidence * 100).toFixed(0)}%)`
       );
     } catch (error: any) {
@@ -349,7 +412,7 @@ export async function generateAndSaveProducts(
     }
   }
 
-  console.log(`[AdaptiveAI] 🎉 Generated ${createdIds.length} products`);
+  console.log(`[AdaptiveAI] 🎉 Generated ${createdIds.length} products (curated from ${strategies.length} strategies)`);
   return createdIds;
 }
 
