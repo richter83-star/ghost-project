@@ -95,7 +95,7 @@ export function getGenericPlaceholderUrl(title: string, productType: string): st
 
 /**
  * Get best available placeholder image URL
- * Uses reliable image services that Shopify can fetch
+ * Uses reliable, publicly accessible image URLs that Shopify can fetch
  */
 export function getBestPlaceholderImage(title?: string, productType?: string): string {
   const width = 800;
@@ -104,12 +104,23 @@ export function getBestPlaceholderImage(title?: string, productType?: string): s
   // Use a seed based on title to get consistent images per product
   const seed = title ? hashString(title) : Math.floor(Math.random() * 1000);
   
-  // Use Unsplash Source API - more reliable and Shopify-friendly
-  // Format: https://source.unsplash.com/{width}x{height}/?{keywords}
-  const keywords = extractKeywords(title || '', productType || '');
-  const keywordStr = keywords.slice(0, 2).join(',');
+  // Use placeholder.com - reliable, fast, and Shopify-friendly
+  // This service is specifically designed for placeholder images
+  const colors = [
+    '6366f1', // Indigo
+    '8b5cf6', // Purple  
+    'ec4899', // Pink
+    'f59e0b', // Amber
+    '10b981', // Emerald
+    '3b82f6', // Blue
+    'ef4444', // Red
+    '14b8a6', // Teal
+  ];
   
-  // Use Unsplash with keywords for relevant images
-  return `https://source.unsplash.com/${width}x${height}/?${keywordStr || 'digital,product,creative'}&sig=${seed}`;
+  const color = colors[seed % colors.length];
+  const text = encodeURIComponent('Digital Product');
+  
+  // placeholder.com is very reliable for Shopify
+  return `https://via.placeholder.com/${width}x${height}/${color}/ffffff?text=${text}`;
 }
 

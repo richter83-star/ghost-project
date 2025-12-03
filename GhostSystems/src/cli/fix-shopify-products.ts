@@ -127,21 +127,24 @@ async function updateDescription(productId: string, description: string): Promis
 }
 
 /**
- * Download image from URL and convert to base64
+ * Download image from URL and convert to base64 properly
  */
-async function downloadImageAsBase64(imageUrl: string): Promise<string> {
+async function downloadImageAsBase64(imageUrl: string): Promise<{ base64: string; contentType: string }> {
   try {
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
-      timeout: 10000,
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; ShopifyBot/1.0)',
+      },
     });
     
-    const buffer = Buffer.from(response.data, 'binary');
+    // Properly convert arraybuffer to buffer
+    const buffer = Buffer.from(response.data);
     const base64 = buffer.toString('base64');
     const contentType = response.headers['content-type'] || 'image/jpeg';
     
-    // Return data URI format
-    return `data:${contentType};base64,${base64}`;
+    return { base64, contentType };
   } catch (error: any) {
     console.error(`  ⚠️  Failed to download image: ${error.message}`);
     throw error;
@@ -149,44 +152,12 @@ async function downloadImageAsBase64(imageUrl: string): Promise<string> {
 }
 
 /**
- * Add image to product using base64 upload (more reliable)
+ * Add image to product - try multiple methods
  */
 async function addProductImage(productId: string, imageUrl: string): Promise<void> {
+  // Method 1: Try direct URL first (simplest, most reliable)
   try {
-    // First, try downloading the image and uploading as base64
-    let imageData;
-    try {
-      console.log(`  📥 Downloading image from: ${imageUrl.substring(0, 50)}...`);
-      const base64Image = await downloadImageAsBase64(imageUrl);
-      
-      // Extract content type and base64 data
-      const matches = base64Image.match(/^data:([^;]+);base64,(.+)$/);
-      if (matches) {
-        const contentType = matches[1];
-        const base64Data = matches[2];
-        
-        // Upload using base64 attachment (more reliable)
-        const response = await axios.post(
-          `${BASE_URL}/products/${productId}/images.json`,
-          {
-            image: {
-              attachment: base64Data,
-              filename: `product-${productId}.jpg`,
-            },
-          },
-          { headers: getHeaders() }
-        );
-        
-        if (response.data?.image?.id) {
-          console.log(`  ✅ Added image to product (base64 upload)`);
-          return;
-        }
-      }
-    } catch (downloadError: any) {
-      console.log(`  ⚠️  Base64 upload failed, trying direct URL: ${downloadError.message}`);
-    }
-    
-    // Fallback: Try direct URL method
+    console.log(`  📤 Method 1: Direct URL upload...`);
     const response = await axios.post(
       `${BASE_URL}/products/${productId}/images.json`,
       {
@@ -194,19 +165,55 @@ async function addProductImage(productId: string, imageUrl: string): Promise<voi
           src: imageUrl,
         },
       },
+      { 
+        headers: getHeaders(),
+        timeout: 30000, // 30 second timeout for Shopify to fetch
+      }
+    );
+    
+    if (response.data?.image?.id) {
+      console.log(`  ✅ Image added successfully via URL`);
+      return;
+    }
+  } catch (urlError: any) {
+    console.log(`  ⚠️  URL upload failed: ${urlError.response?.status || urlError.message}`);
+  }
+  
+  // Method 2: Download and upload as base64
+  try {
+    console.log(`  📥 Method 2: Downloading and uploading as base64...`);
+    const { base64, contentType } = await downloadImageAsBase64(imageUrl);
+    
+    // Determine file extension from content type
+    let ext = 'jpg';
+    if (contentType.includes('png')) ext = 'png';
+    else if (contentType.includes('gif')) ext = 'gif';
+    else if (contentType.includes('webp')) ext = 'webp';
+    
+    const response = await axios.post(
+      `${BASE_URL}/products/${productId}/images.json`,
+      {
+        image: {
+          attachment: base64,
+          filename: `product-${productId}.${ext}`,
+        },
+      },
       { headers: getHeaders() }
     );
     
     if (response.data?.image?.id) {
-      console.log(`  ✅ Added image to product (URL upload)`);
-    } else {
-      throw new Error('Image upload succeeded but no image ID returned');
+      console.log(`  ✅ Image added successfully via base64`);
+      return;
     }
-  } catch (error: any) {
-    const errorDetails = error.response?.data || error.message;
-    console.error(`  ❌ Failed to add image:`, typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails, null, 2));
-    throw error;
+  } catch (base64Error: any) {
+    console.log(`  ⚠️  Base64 upload failed: ${base64Error.response?.status || base64Error.message}`);
+    if (base64Error.response?.data) {
+      console.error(`  📋 Error:`, JSON.stringify(base64Error.response.data, null, 2));
+    }
   }
+  
+  // If both methods failed, throw error
+  throw new Error('All image upload methods failed. Shopify may not be able to fetch the image URL.');
 }
 
 async function main() {
