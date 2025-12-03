@@ -57,6 +57,10 @@ services:
       - key: FIRESTORE_JOBS_COLLECTION
         value: products
         sync: false
+      # Shopify pipeline rate limiting (optional, defaults to 2000ms = 2 seconds between products)
+      - key: SHOPIFY_PIPELINE_DELAY_MS
+        value: 2000
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   # All functionality is now in the main web service (ghostsystems)

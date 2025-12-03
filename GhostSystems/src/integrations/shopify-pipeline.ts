@@ -6,6 +6,17 @@ import { createProduct, validateConfig as validateShopifyConfig } from '../lib/s
 
 let db: FirebaseFirestore.Firestore | null = null;
 
+// Rate limiting configuration
+// Shopify REST Admin API allows ~2 requests/second (or 40 requests/minute)
+// Process one product every 2 seconds to stay well within limits
+const PROCESSING_DELAY_MS = parseInt(
+  process.env.SHOPIFY_PIPELINE_DELAY_MS || '2000',
+  10
+); // Default: 2 seconds between products
+// Processing queue and state
+const processingQueue: Array<FirebaseFirestore.QueryDocumentSnapshot> = [];
+let isProcessing = false;
+
 /**
  * Initialize Firebase Admin for Shopify pipeline
  */
@@ -142,6 +153,63 @@ async function processDraftProduct(docSnap: FirebaseFirestore.QueryDocumentSnaps
 }
 
 /**
+ * Process the queue with rate limiting
+ * Processes products sequentially with delays to avoid overwhelming Shopify API
+ */
+async function processQueue() {
+  if (isProcessing || processingQueue.length === 0) {
+    return;
+  }
+
+  isProcessing = true;
+  console.log(
+    `[ShopifyPipeline] 🚀 Starting queue processing (${processingQueue.length} items in queue, delay: ${PROCESSING_DELAY_MS}ms between products)`
+  );
+
+  while (processingQueue.length > 0) {
+    const docSnap = processingQueue.shift();
+    if (!docSnap) break;
+    const data = docSnap.data();
+    const title = (data as any)?.title || '(no title)';
+
+    console.log(
+      `[ShopifyPipeline] 📦 Processing product from queue: "${title}" (${processingQueue.length} remaining)`
+    );
+
+    try {
+      // Process product sequentially (await to ensure one at a time)
+      await processDraftProduct(docSnap);
+    } catch (error: any) {
+      console.error(
+        `[ShopifyPipeline] Unhandled error processing product ${docSnap.id}:`,
+        error
+      );
+    } finally {
+      // Product processing complete, continue to next
+    }
+
+    // Rate limit: wait before processing next product
+    // Only wait if there are more items in queue
+    if (processingQueue.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, PROCESSING_DELAY_MS));
+    }
+  }
+
+  isProcessing = false;
+  
+  // Check if more items were added to the queue while processing
+  if (processingQueue.length > 0) {
+    console.log(
+      `[ShopifyPipeline] 🔄 More items added to queue (${processingQueue.length} remaining), continuing processing...`
+    );
+    // Recursively process remaining items
+    processQueue();
+  } else {
+    console.log('[ShopifyPipeline] ✅ Queue processing complete');
+  }
+}
+
+/**
  * Start the Shopify product pipeline listener
  * Watches for products with status "draft" and processes them
  */
@@ -180,25 +248,22 @@ export function startShopifyPipeline() {
       );
       const draftCount = newDrafts.length;
 
+      // Add new drafts to processing queue
+      newDrafts.forEach((change) => {
+        processingQueue.push(change.doc);
+      });
+
       // Log if there are new drafts to process
       if (draftCount > 0) {
         console.log(
-          `[ShopifyPipeline] ✅ Processing ${draftCount} draft product(s)...`
+          `[ShopifyPipeline] ✅ Queued ${draftCount} draft product(s) for processing (queue size: ${processingQueue.length})`
         );
       }
 
-      // Process each new draft document asynchronously
-      newDrafts.forEach((change) => {
-        const docSnap = change.doc;
-
-        // Process in background (don't await - let listener continue)
-        processDraftProduct(docSnap).catch((error) => {
-          console.error(
-            `[ShopifyPipeline] Unhandled error processing product ${docSnap.id}:`,
-            error
-          );
-        });
-      });
+      // Start processing queue if not already running
+      if (!isProcessing && processingQueue.length > 0) {
+        processQueue();
+      }
     },
     (error) => {
       console.error('[ShopifyPipeline] ❌ Listener Error:', error);
