@@ -5,7 +5,7 @@ services:
     plan: free              # or starter / pro if you upgrade later
     rootDir: ./             # tells Render to build from repo root
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: npx tsx src/server.ts
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -28,6 +28,35 @@ services:
         sync: false
       - key: NOTION_DB_PRODUCTS_ID
         sync: false
+      # Shopify configuration (standardized)
+      - key: SHOPIFY_STORE_URL
+        value: dracanus-ai.myshopify.com
+        sync: false
+      - key: SHOPIFY_ADMIN_API_TOKEN
+        sync: false
+      - key: SHOPIFY_API_VERSION
+        value: 2025-01
+        sync: false
+      - key: SHOPIFY_WEBHOOK_SECRET
+        sync: false
+      # Firebase (required for listeners)
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      # Gemini AI (for content generation)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-preview-09-2025
+        sync: false
+      # Email service (Resend - for digital goods delivery)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      # Firestore collection name
+      - key: FIRESTORE_JOBS_COLLECTION
+        value: products
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   - type: worker
@@ -35,6 +64,6 @@ services:
     env: node
     rootDir: ./
     buildCommand: npm install
-    startCommand: node src/cloud/runner.js
+    startCommand: npx tsx src/cloud/runner.ts
     autoDeploy: true
 

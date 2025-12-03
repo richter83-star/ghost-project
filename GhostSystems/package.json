@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build": "npm install && python -m pip install --upgrade pip && python -m pip install --no-cache-dir --index-url https://pypi.org/simple/ -r python/requirements.txt",
-    "start": "npx tsx src/cloud/runner.ts",
+    "start": "npx tsx src/server.ts",
     "forge": "tsx src/cli/forge.ts",
     "analyze": "tsx src/cli/analyze.ts",
     "weekly": "tsx src/cli/run-weekly.ts",

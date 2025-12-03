@@ -50,11 +50,13 @@ export function startNexusListener() {
     return;
   }
 
+  const collectionName = process.env.FIRESTORE_JOBS_COLLECTION || 'products';
+
   console.log(
-    '[GhostSystems] 📡 Nexus Listener: Watching products with status = "pending"...'
+    `[GhostSystems] 📡 Nexus Listener: Watching products with status = "pending" in collection "${collectionName}"...`
   );
 
-  const productsRef = db.collection('products');
+  const productsRef = db.collection(collectionName);
   const query = productsRef.where('status', '==', 'pending');
 
   query.onSnapshot(

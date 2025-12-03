@@ -1,19 +1,17 @@
 import 'dotenv/config'; // Loads variables from .env
 import express from 'express';
-// --- THIS IS THE FIX ---
-// We changed '../integrations/nexus/listener' to './integrations/nexus/listener.js'
-// 1. './' means "start in the current folder (src)"
-// 2. '.js' is required for Node.js ES Modules, even in TypeScript.
 import { startNexusListener } from './integrations/nexus/listener.js';
+import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
+import shopifyRoutes from './cloud/routes/shopify.js';
 
 // Initialize Express
 const app = express();
 const PORT = process.env.PORT || 10000; // Use 10000, as seen in your logs
 
 async function main() {
-  console.log("=================================");
-  console.log("   GHOST FLEET CONTROLLER     ");
-  console.log("=================================");
+  console.log('=================================');
+  console.log('   GHOST FLEET CONTROLLER     ');
+  console.log('=================================');
 
   // ---------------------------------------------------------
   // 1. Start Web Server
@@ -24,27 +22,46 @@ async function main() {
     res.status(200).json({
       system: 'Ghost Fleet Controller',
       status: 'Online',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      services: {
+        nexus: 'active',
+        shopifyPipeline: 'active',
+        webhooks: 'active',
+      },
     });
   });
 
+  // ---------------------------------------------------------
+  // 2. Webhook Routes
+  // Shopify webhooks for order fulfillment
+  // ---------------------------------------------------------
+  app.use('/webhook/shopify', shopifyRoutes);
+
   app.listen(PORT, () => {
     // This is the log line you are seeing
-    console.log(`[FleetController] live on port ${PORT}`); 
+    console.log(`[FleetController] live on port ${PORT}`);
   });
 
   // ---------------------------------------------------------
-  // 2. THIS IS THE MISSING PIECE: Initialize The "Ear" 
-  // We are adding the Nexus Listener to THIS file.
+  // 3. Initialize Firestore Listeners
+  // - Nexus Listener: Processes "pending" → "draft"
+  // - Shopify Pipeline: Processes "draft" → "published"
   // ---------------------------------------------------------
   try {
-    console.log("[INIT] 📡 connecting to Nexus Command...");
-    startNexusListener(); // <--- THIS IS THE FIX
+    console.log('[INIT] 📡 connecting to Nexus Command...');
+    startNexusListener();
   } catch (error) {
-    console.error("[ERROR] Failed to start Nexus listener:", error);
+    console.error('[ERROR] Failed to start Nexus listener:', error);
   }
 
-  console.log("[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.");
+  try {
+    console.log('[INIT] 🛍️ starting Shopify Pipeline...');
+    startShopifyPipeline();
+  } catch (error) {
+    console.error('[ERROR] Failed to start Shopify pipeline:', error);
+  }
+
+  console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');
 }
 
 // Global Error Handling
