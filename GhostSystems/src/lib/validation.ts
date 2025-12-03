@@ -21,11 +21,15 @@ export function validateJobData(data: any): {
     throw new Error('Validation Failed: Missing or empty product title.');
   }
 
-  if (!data.productType || typeof data.productType !== 'string' || data.productType.trim() === '') {
+  // Accept both 'productType' and 'product_type' field names (for compatibility)
+  const productType = data.productType || data.product_type;
+  if (!productType || typeof productType !== 'string' || productType.trim() === '') {
     throw new Error('Validation Failed: Missing or empty product type.');
   }
 
-  if (!data.price || isNaN(data.price) || Number(data.price) <= 0) {
+  // Accept both 'price' and 'price_usd' field names (for compatibility)
+  const price = data.price || data.price_usd;
+  if (!price || isNaN(price) || Number(price) <= 0) {
     throw new Error('Validation Failed: Missing, invalid, or zero price.');
   }
 
@@ -42,8 +46,8 @@ export function validateJobData(data: any): {
   return {
     title: data.title.trim(),
     description,
-    productType: data.productType.trim(),
-    price: Number(data.price),
+    productType: productType.trim(),
+    price: Number(price),
     ...(imageUrl && { imageUrl }),
   };
 }
