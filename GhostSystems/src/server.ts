@@ -3,6 +3,7 @@ import express from 'express';
 import { startNexusListener } from './integrations/nexus/listener.js';
 import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
+import { startAdaptiveAIListener } from './integrations/adaptive-ai/listener.js';
 
 // Initialize Express
 const app = express();
@@ -59,6 +60,21 @@ async function main() {
     startShopifyPipeline();
   } catch (error) {
     console.error('[ERROR] Failed to start Shopify pipeline:', error);
+  }
+
+  // ---------------------------------------------------------
+  // 4. Initialize Adaptive AI (Optional)
+  // Generates products based on market insights
+  // ---------------------------------------------------------
+  if (process.env.ENABLE_ADAPTIVE_AI === 'true') {
+    try {
+      console.log('[INIT] 🧠 starting Adaptive AI Listener...');
+      startAdaptiveAIListener();
+    } catch (error) {
+      console.error('[ERROR] Failed to start Adaptive AI listener:', error);
+    }
+  } else {
+    console.log('[INIT] ℹ️ Adaptive AI disabled (set ENABLE_ADAPTIVE_AI=true to enable)');
   }
 
   console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');

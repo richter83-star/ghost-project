@@ -61,6 +61,19 @@ services:
       - key: SHOPIFY_PIPELINE_DELAY_MS
         value: 2000
         sync: false
+      # Adaptive AI configuration (optional)
+      - key: ENABLE_ADAPTIVE_AI
+        value: 'true'
+        sync: false
+      - key: ADAPTIVE_AI_GENERATION_INTERVAL_HOURS
+        value: '24'
+        sync: false
+      - key: ADAPTIVE_AI_MIN_PRODUCTS
+        value: '3'
+        sync: false
+      - key: ADAPTIVE_AI_MAX_PRODUCTS
+        value: '5'
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   # All functionality is now in the main web service (ghostsystems)
