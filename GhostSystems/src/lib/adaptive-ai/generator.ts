@@ -259,11 +259,7 @@ export async function generateProduct(
 
   // Generate AI-enhanced description if Gemini is available
   try {
-    const aiDescription = await generateDescription({
-      title,
-      productType: strategy.productType,
-      niche: niche.desc,
-    });
+    const aiDescription = await generateDescription(title, strategy.productType);
     if (aiDescription) {
       description = aiDescription;
     }

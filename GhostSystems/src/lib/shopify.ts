@@ -66,9 +66,8 @@ export async function createProduct(productData: {
       variants: [
         {
           price: price.toString(),
-          inventory_management: 'shopify',
-          inventory_policy: 'deny',
-          inventory_quantity: 0,
+          inventory_management: null, // Don't track inventory for digital products
+          inventory_policy: 'continue', // Allow purchases (unlimited stock)
           requires_shipping: false, // Digital products don't need shipping
           taxable: false,
         },

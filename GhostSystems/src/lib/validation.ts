@@ -2,7 +2,7 @@
  * Validation utilities for product data
  */
 
-const MIN_DESCRIPTION_LENGTH = 20;
+const MIN_DESCRIPTION_LENGTH = 150; // Minimum 150 characters for a usable description
 
 /**
  * Validates product job data

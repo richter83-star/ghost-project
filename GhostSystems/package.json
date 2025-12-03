@@ -15,6 +15,7 @@
     "register": "tsx src/fleet/register-node.ts",
     "abacus:sync": "tsx src/integrations/abacus/poll.ts",
     "fix:archived": "tsx src/cli/fix-archived-products.ts",
+    "fix:shopify": "tsx src/cli/fix-shopify-products.ts",
     "adaptive-ai:analyze": "tsx src/cli/adaptive-ai.ts analyze",
     "adaptive-ai:generate": "tsx src/cli/adaptive-ai.ts generate",
     "py:init": "python -m pip install -r python/requirements.txt",

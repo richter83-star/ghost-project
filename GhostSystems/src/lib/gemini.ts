@@ -10,11 +10,18 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-09-20
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const DESCRIPTION_PROMPT = `
-  You are an expert e-commerce copywriter.
-  Your task is to write a compelling, SEO-friendly, and persuasive product description.
-  Use the provided title, product type, and image URL analysis to create a description.
-  The output MUST be plain text, with no Markdown or HTML.
-  Keep it concise, between 2 and 4 sentences.
+  You are an expert e-commerce copywriter specializing in digital products.
+  
+  Write a compelling, SEO-friendly product description that:
+  - Is 4-6 sentences long (minimum 150 words)
+  - Highlights key features and benefits
+  - Uses persuasive, professional language
+  - Includes relevant keywords naturally
+  - Explains what the customer will receive
+  - Creates urgency and value perception
+  
+  The output MUST be plain text only, with no Markdown or HTML formatting.
+  Write in a clear, professional tone that sells the product effectively.
 `;
 
 /**
@@ -32,8 +39,13 @@ export async function generateDescription(
   }
 
   const userQuery = `
+    Write a compelling product description for:
+    
     Product Title: "${title}"
     Product Type: "${productType}"
+    
+    Make it detailed, persuasive, and highlight the value this product provides to customers.
+    Focus on benefits, not just features. Write as if you're speaking directly to the ideal customer.
   `;
 
   const payload = {
