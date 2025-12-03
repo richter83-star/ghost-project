@@ -96,19 +96,29 @@ async function processDraftProduct(docSnap: FirebaseFirestore.QueryDocumentSnaps
       }
     }
 
-    // Generate image if missing (optional - can be skipped if not needed)
+    // Generate image if missing
     let imageUrl = validatedData.imageUrl;
     if (!imageUrl) {
-      console.log(`[ShopifyPipeline] Image URL not provided for product ${productId}.`);
-      // You can uncomment this to generate images automatically:
-      // try {
-      //   const imagePrompt = `${validatedData.title} - ${validatedData.productType}`;
-      //   const base64Image = await generateImage(imagePrompt);
-      //   // TODO: Upload base64Image to Firebase Storage or CDN, get URL
-      //   // imageUrl = uploadedUrl;
-      // } catch (error: any) {
-      //   console.warn(`[ShopifyPipeline] Failed to generate image: ${error.message}`);
-      // }
+      console.log(`[ShopifyPipeline] Image URL not provided for product ${productId}, using placeholder...`);
+      
+      // Use placeholder image (always available)
+      const { getBestPlaceholderImage } = await import('../lib/image-placeholder.js');
+      imageUrl = getBestPlaceholderImage(validatedData.title, validatedData.productType);
+      console.log(`[ShopifyPipeline] ✅ Using placeholder image: ${imageUrl}`);
+      
+      // Optional: Try to generate real image if Gemini API is available
+      // Uncomment when ready to use AI-generated images:
+      /*
+      try {
+        const { generateImage } = await import('../lib/gemini.js');
+        const imagePrompt = `${validatedData.title} - ${validatedData.productType}`;
+        const base64Image = await generateImage(imagePrompt);
+        // TODO: Upload base64Image to Firebase Storage or CDN, get URL
+        // imageUrl = uploadedUrl;
+      } catch (error: any) {
+        console.log(`[ShopifyPipeline] AI image generation not available, using placeholder: ${error.message}`);
+      }
+      */
     }
 
     // Create product in Shopify
