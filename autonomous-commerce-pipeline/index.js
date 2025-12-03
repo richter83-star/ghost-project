@@ -14,9 +14,32 @@ const __dirname = path.dirname(__filename);
 // ===============================
 const ALLOWED_TYPES = new Set(['prompt_pack', 'automation_kit', 'bundle']);
 
-// Treat these as “digital only” booleans across legacy/new docs
+// Treat these as "digital only" booleans across legacy/new docs
+// Check multiple field name variations used by Oracle/brain.py
 function isDigitalOnly(data) {
-  return data?.digitalOnly === true || data?.digital_only === true;
+  // Check all possible field name variations
+  if (
+    data?.digitalOnly === true ||
+    data?.digital_only === true ||
+    data?.is_digital === true ||
+    data?.digital === true
+  ) {
+    return true;
+  }
+  
+  // All products in ALLOWED_TYPES are digital by nature (prompt_pack, automation_kit, bundle)
+  // If product type is in allowed types, treat as digital
+  const type = data?.productType || data?.product_type;
+  if (type && ALLOWED_TYPES.has(type)) {
+    return true;
+  }
+  
+  // Also check if requires_shipping is false (indicates digital)
+  if (data?.requires_shipping === false || data?.requiresShipping === false) {
+    return true;
+  }
+  
+  return false;
 }
 
 function shouldProcess(data) {

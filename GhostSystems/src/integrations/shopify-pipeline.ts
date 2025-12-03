@@ -174,13 +174,21 @@ export function startShopifyPipeline() {
 
   query.onSnapshot(
     (snapshot) => {
-      let draftCount = 0;
+      // Count new documents synchronously before processing
+      const newDrafts = snapshot.docChanges().filter(
+        (change) => change.type === 'added'
+      );
+      const draftCount = newDrafts.length;
 
-      snapshot.docChanges().forEach(async (change) => {
-        // Only process newly added documents (not modifications)
-        if (change.type !== 'added') return;
+      // Log if there are new drafts to process
+      if (draftCount > 0) {
+        console.log(
+          `[ShopifyPipeline] ✅ Processing ${draftCount} draft product(s)...`
+        );
+      }
 
-        draftCount++;
+      // Process each new draft document asynchronously
+      newDrafts.forEach((change) => {
         const docSnap = change.doc;
 
         // Process in background (don't await - let listener continue)
@@ -191,12 +199,6 @@ export function startShopifyPipeline() {
           );
         });
       });
-
-      if (draftCount > 0) {
-        console.log(
-          `[ShopifyPipeline] ✅ Processing ${draftCount} draft product(s)...`
-        );
-      }
     },
     (error) => {
       console.error('[ShopifyPipeline] ❌ Listener Error:', error);

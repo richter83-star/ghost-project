@@ -14,6 +14,7 @@
     "controller": "tsx src/fleet/controller.ts",
     "register": "tsx src/fleet/register-node.ts",
     "abacus:sync": "tsx src/integrations/abacus/poll.ts",
+    "fix:archived": "tsx src/cli/fix-archived-products.ts",
     "py:init": "python -m pip install -r python/requirements.txt",
     "py:gen": "python python/product_generator.py",
     "py:fmt": "python python/formatter.py"

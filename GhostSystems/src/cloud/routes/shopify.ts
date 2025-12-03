@@ -5,6 +5,19 @@ import { fetchProductMetafield } from '../../lib/shopify.js';
 
 const router = express.Router();
 
+/**
+ * Escape HTML to prevent XSS attacks
+ */
+function escapeHtml(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Configuration
 const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -157,9 +170,13 @@ router.post(
         );
 
         if (digitalContent) {
+          // Escape HTML to prevent XSS injection attacks
+          const escapedTitle = escapeHtml(item.title || 'Untitled Product');
+          const escapedContent = escapeHtml(digitalContent);
+          
           emailHtmlContent += `
-            <h2>${item.title}</h2>
-            <pre style="background-color:#f4f4f4; padding: 1em; border-radius: 5px; white-space: pre-wrap;">${digitalContent}</pre>
+            <h2>${escapedTitle}</h2>
+            <pre style="background-color:#f4f4f4; padding: 1em; border-radius: 5px; white-space: pre-wrap;">${escapedContent}</pre>
           `;
         } else {
           console.warn(

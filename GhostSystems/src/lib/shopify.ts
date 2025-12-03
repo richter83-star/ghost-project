@@ -5,6 +5,19 @@ import axios from 'axios';
  * Standardized configuration and API calls for dracanus-ai.myshopify.com
  */
 
+/**
+ * Escape HTML to prevent XSS attacks
+ */
+function escapeHtml(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Standardized configuration
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
@@ -41,10 +54,13 @@ export async function createProduct(productData: {
 }): Promise<string> {
   const { title, description, productType, price, imageUrl } = productData;
 
+  // Escape HTML in description to prevent XSS injection attacks
+  const escapedDescription = escapeHtml(description);
+
   const shopifyProductPayload = {
     product: {
       title,
-      body_html: `<p>${description}</p>`,
+      body_html: `<p>${escapedDescription}</p>`,
       product_type: productType,
       status: 'active',
       variants: [
