@@ -12,6 +12,7 @@ import axios from 'axios';
 import { fetchProducts } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
 import { generateDescription } from '../lib/gemini.js';
+import { getBestCategory } from '../lib/category-mapper.js';
 import { Readable } from 'stream';
 
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
@@ -69,17 +70,8 @@ async function fixVariantInventory(variantId: string, productId: string): Promis
 /**
  * Update product category/type
  */
-async function updateProductCategory(productId: string, productType: string): Promise<void> {
+async function updateProductCategory(productId: string, category: string): Promise<void> {
   try {
-    // Map product types to Shopify-friendly categories
-    const categoryMap: Record<string, string> = {
-      'prompt_pack': 'Digital Artwork',
-      'automation_kit': 'Digital Services',
-      'bundle': 'Digital Bundle',
-    };
-    
-    const category = categoryMap[productType] || 'Digital Goods';
-    
     const response = await axios.put(
       `${BASE_URL}/products/${productId}.json`,
       {
@@ -93,6 +85,9 @@ async function updateProductCategory(productId: string, productType: string): Pr
     console.log(`  ✅ Updated category to: ${category}`);
   } catch (error: any) {
     console.error(`  ❌ Failed to update category:`, error.message);
+    if (error.response?.data) {
+      console.error(`  📋 Error details:`, JSON.stringify(error.response.data, null, 2));
+    }
   }
 }
 
@@ -287,19 +282,26 @@ async function main() {
       }
 
       // Fix category if missing or generic
-      const productType = product.product_type || '';
-      if (!productType || productType === 'Digital Goods' || productType.length < 3) {
-        // Try to infer from title or set default
-        let inferredType = 'Digital Artwork';
-        if (product.title?.toLowerCase().includes('prompt')) {
-          inferredType = 'Digital Artwork';
-        } else if (product.title?.toLowerCase().includes('automation') || product.title?.toLowerCase().includes('kit')) {
-          inferredType = 'Digital Services';
-        } else if (product.title?.toLowerCase().includes('bundle')) {
-          inferredType = 'Digital Bundle';
+      const currentProductType = product.product_type || '';
+      const needsCategoryFix = !currentProductType || 
+                               currentProductType === 'Digital Goods' || 
+                               currentProductType.length < 3 ||
+                               currentProductType === 'digital' ||
+                               currentProductType === 'Digital';
+      
+      if (needsCategoryFix) {
+        // Use intelligent category inference
+        const inferredCategory = getBestCategory(product.title || '', currentProductType);
+        console.log(`  📋 Inferred category: "${inferredCategory}" from title: "${product.title?.substring(0, 50)}..."`);
+        
+        if (inferredCategory !== currentProductType) {
+          await updateProductCategory(product.id, inferredCategory);
+          fixedCategories++;
+        } else {
+          console.log(`  ✅ Category already correct: ${currentProductType}`);
         }
-        await updateProductCategory(product.id, inferredType);
-        fixedCategories++;
+      } else {
+        console.log(`  ✅ Category OK: ${currentProductType}`);
       }
 
       // Check and improve description

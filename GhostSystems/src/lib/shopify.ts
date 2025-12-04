@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getBestCategory } from './category-mapper.js';
 
 /**
  * Unified Shopify Client
@@ -56,12 +57,15 @@ export async function createProduct(productData: {
 
   // Escape HTML in description to prevent XSS injection attacks
   const escapedDescription = escapeHtml(description);
+  
+  // Map product type to proper Shopify category
+  const shopifyCategory = getBestCategory(title, productType);
 
   const shopifyProductPayload = {
     product: {
       title,
       body_html: `<p>${escapedDescription}</p>`,
-      product_type: productType,
+      product_type: shopifyCategory, // Use mapped category instead of raw productType
       status: 'active',
       variants: [
         {
