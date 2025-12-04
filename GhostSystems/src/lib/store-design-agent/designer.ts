@@ -325,7 +325,7 @@ async function generateAIRecommendations(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     // Build brand context section
     const brandContext = brandProfile ? `
@@ -427,7 +427,7 @@ export async function generateCopy(
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompts: Record<string, string> = {
       meta_description: `Write an SEO-optimized meta description (150-160 characters) for this product:

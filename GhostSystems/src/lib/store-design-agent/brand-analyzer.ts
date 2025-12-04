@@ -98,7 +98,7 @@ export async function analyzeLogo(logoUrl: string): Promise<BrandProfile | null>
       return null;
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `You are a brand design expert. Analyze this logo and provide a comprehensive brand profile.
 
