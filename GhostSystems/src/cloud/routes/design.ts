@@ -1012,6 +1012,90 @@ router.post('/organize-collections', async (req, res) => {
 });
 
 /**
+ * Generate AI images for all products
+ * POST /api/design/generate-images
+ */
+router.post('/generate-images', async (req, res) => {
+  try {
+    const { fetchProducts, updateProduct } = await import('../../lib/shopify.js');
+    const { generateImage } = await import('../../lib/gemini.js');
+    
+    console.log('[DesignAgent] 🎨 Generating AI images for products...');
+    
+    const products = await fetchProducts();
+    const forceReplace = req.query.force === 'true';
+    const limit = parseInt(req.query.limit as string) || products.length;
+    
+    // Filter products that need images
+    const productsNeedingImages = products.filter((p: any) => {
+      if (forceReplace) return true;
+      if (!p.images || p.images.length === 0) return true;
+      // Check for placeholder images
+      const src = p.images[0]?.src || '';
+      return src.includes('placeholder') || src.includes('picsum');
+    }).slice(0, limit);
+    
+    console.log(`[DesignAgent] Found ${productsNeedingImages.length} products needing images`);
+    
+    let generated = 0;
+    let failed = 0;
+    const results: any[] = [];
+    
+    for (const product of productsNeedingImages) {
+      try {
+        console.log(`[DesignAgent] Generating image for: ${product.title}`);
+        
+        // Generate AI image
+        const base64Image = await generateImage(product.title, product.product_type || 'digital');
+        
+        // Upload to Shopify
+        await updateProduct(product.id, {
+          images: [{ attachment: base64Image }],
+        });
+        
+        generated++;
+        results.push({
+          id: product.id,
+          title: product.title,
+          status: 'success',
+        });
+        
+        console.log(`[DesignAgent] ✅ Image generated for ${product.title}`);
+        
+        // Rate limiting - Imagen has limits
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (err: any) {
+        failed++;
+        results.push({
+          id: product.id,
+          title: product.title,
+          status: 'failed',
+          error: err.message,
+        });
+        console.error(`[DesignAgent] ❌ Failed to generate image for ${product.title}:`, err.message);
+        
+        // Continue with next product
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    console.log(`[DesignAgent] Image generation complete: ${generated} success, ${failed} failed`);
+    
+    res.json({
+      success: true,
+      message: `Generated ${generated} images, ${failed} failed`,
+      generated,
+      failed,
+      total: productsNeedingImages.length,
+      results,
+    });
+  } catch (error: any) {
+    console.error('[DesignAgent] Image generation failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Helper to escape HTML
  */
 function escapeHtml(text: string): string {
