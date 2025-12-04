@@ -919,10 +919,10 @@ router.get('/products', async (req, res) => {
  */
 router.post('/organize-collections', async (req, res) => {
   try {
-    const { fetchProducts, getCollections, createCollection, updateProduct } = await import('../../lib/shopify.js');
+    const { fetchProducts, getCollections, createCollection, addProductToCollection } = await import('../../lib/shopify.js');
     
     const products = await fetchProducts();
-    const existingCollections = await getCollections();
+    let existingCollections = await getCollections();
     
     // Group products by product_type
     const byType: Record<string, any[]> = {};
@@ -934,52 +934,75 @@ router.post('/organize-collections', async (req, res) => {
     
     const results: any[] = [];
     
+    // First pass: Create collections that don't exist
     for (const [productType, typeProducts] of Object.entries(byType)) {
       // Check if collection already exists
       const existingCollection = existingCollections.find(
         (c: any) => c.title.toLowerCase() === productType.toLowerCase()
       );
       
-      if (existingCollection) {
+      if (!existingCollection) {
+        try {
+          const newCollection = await createCollection({
+            title: productType,
+            body_html: `<p>Browse our ${productType} collection.</p>`,
+            sort_order: 'best-selling',
+          });
+          console.log(`[DesignAgent] Created collection: ${productType} (ID: ${newCollection?.id})`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (err: any) {
+          console.error(`[DesignAgent] Failed to create collection ${productType}:`, err.message);
+        }
+      }
+    }
+    
+    // Refresh collections list
+    existingCollections = await getCollections();
+    
+    // Second pass: Add products to their collections
+    for (const [productType, typeProducts] of Object.entries(byType)) {
+      const collection = existingCollections.find(
+        (c: any) => c.title.toLowerCase() === productType.toLowerCase()
+      );
+      
+      if (!collection) {
         results.push({
           type: productType,
-          action: 'exists',
-          collectionId: existingCollection.id,
+          action: 'failed',
+          error: 'Collection not found',
           products: typeProducts.length,
+          added: 0,
         });
         continue;
       }
       
-      // Create new collection
-      try {
-        const newCollection = await createCollection({
-          title: productType,
-          body_html: `<p>Browse our ${productType} collection.</p>`,
-          sort_order: 'best-selling',
-        });
-        
-        results.push({
-          type: productType,
-          action: 'created',
-          collectionId: newCollection?.id,
-          products: typeProducts.length,
-        });
-        
-        // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (err: any) {
-        results.push({
-          type: productType,
-          action: 'failed',
-          error: err.message,
-          products: typeProducts.length,
-        });
+      let added = 0;
+      for (const product of typeProducts) {
+        try {
+          await addProductToCollection(product.id, collection.id);
+          added++;
+          // Rate limiting - Shopify API
+          await new Promise(resolve => setTimeout(resolve, 250));
+        } catch (err: any) {
+          // Product might already be in collection, that's fine
+          if (!err.message?.includes('already')) {
+            console.error(`[DesignAgent] Failed to add product ${product.id} to collection:`, err.message);
+          }
+        }
       }
+      
+      results.push({
+        type: productType,
+        action: 'organized',
+        collectionId: collection.id,
+        products: typeProducts.length,
+        added,
+      });
     }
     
     res.json({
       success: true,
-      message: 'Collections organized',
+      message: 'Collections organized and products assigned',
       results,
     });
   } catch (error: any) {
