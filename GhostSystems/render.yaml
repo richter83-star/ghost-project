@@ -98,6 +98,30 @@ services:
       - key: DYNAMIC_PRICING_INTERVAL_DAYS
         value: '7'
         sync: false
+      # Store Design Agent (AI-powered store optimization)
+      - key: ENABLE_STORE_DESIGN_AGENT
+        value: 'true'
+        sync: false
+      - key: DESIGN_AGENT_INTERVAL_HOURS
+        value: '24'
+        sync: false
+      - key: DESIGN_AGENT_AUTO_APPLY
+        value: 'false'
+        sync: false
+      - key: DESIGN_AGENT_MIN_CONFIDENCE
+        value: '0.7'
+        sync: false
+      - key: DESIGN_AGENT_MAX_DAILY_CHANGES
+        value: '5'
+        sync: false
+      - key: DESIGN_AGENT_NOTIFY_EMAIL
+        sync: false
+      - key: DESIGN_AGENT_RUN_ON_STARTUP
+        value: 'false'
+        sync: false
+      - key: APP_URL
+        value: 'https://ghostsystems.onrender.com'
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   # All functionality is now in the main web service (ghostsystems)

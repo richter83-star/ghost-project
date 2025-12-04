@@ -3,8 +3,10 @@ import express from 'express';
 import { startNexusListener } from './integrations/nexus/listener.js';
 import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
+import designRoutes from './cloud/routes/design.js';
 import { startAdaptiveAIListener } from './integrations/adaptive-ai/listener.js';
 import { startDynamicPricingListener, getDynamicPricingStatus, triggerPricingOptimization } from './integrations/dynamic-pricing/listener.js';
+import { startDesignAgentListener } from './integrations/store-design-agent/listener.js';
 
 // Initialize Express
 const app = express();
@@ -35,6 +37,7 @@ async function main() {
         abandonedCartRecovery: process.env.ENABLE_ABANDONED_CART === 'true' ? 'active' : 'disabled',
         dynamicPricing: pricingStatus.enabled ? 'active' : 'disabled',
         aiImages: process.env.ENABLE_AI_IMAGES !== 'false' ? 'active' : 'disabled',
+        storeDesignAgent: process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? 'active' : 'disabled',
       },
       dynamicPricing: pricingStatus,
     });
@@ -54,6 +57,11 @@ async function main() {
   // Shopify webhooks for order fulfillment
   // ---------------------------------------------------------
   app.use('/webhook/shopify', shopifyRoutes);
+
+  // ---------------------------------------------------------
+  // 2b. Design Agent API Routes
+  // ---------------------------------------------------------
+  app.use('/api/design', designRoutes);
 
   app.listen(PORT, () => {
     // This is the log line you are seeing
@@ -109,12 +117,28 @@ async function main() {
     console.log('[INIT] ℹ️ Dynamic pricing disabled (set ENABLE_DYNAMIC_PRICING=true to enable)');
   }
 
+  // ---------------------------------------------------------
+  // 6. Initialize Store Design Agent (Optional)
+  // AI-powered store design optimization
+  // ---------------------------------------------------------
+  if (process.env.ENABLE_STORE_DESIGN_AGENT === 'true') {
+    try {
+      console.log('[INIT] 🎨 starting Store Design Agent...');
+      startDesignAgentListener();
+    } catch (error) {
+      console.error('[ERROR] Failed to start Store Design Agent:', error);
+    }
+  } else {
+    console.log('[INIT] ℹ️ Store Design Agent disabled (set ENABLE_STORE_DESIGN_AGENT=true to enable)');
+  }
+
   // Log feature status
   console.log('[INIT] Feature Status:');
   console.log(`  - AI Images: ${process.env.ENABLE_AI_IMAGES !== 'false' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Adaptive AI: ${process.env.ENABLE_ADAPTIVE_AI === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Abandoned Cart: ${process.env.ENABLE_ABANDONED_CART === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Dynamic Pricing: ${process.env.ENABLE_DYNAMIC_PRICING === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Store Design Agent: ${process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
 
   console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');
 }

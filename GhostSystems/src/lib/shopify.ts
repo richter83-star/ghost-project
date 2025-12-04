@@ -346,3 +346,289 @@ export function validateConfig(): boolean {
   return true;
 }
 
+// =============================================================================
+// THEME API - Store Design Agent
+// =============================================================================
+
+export interface ShopifyTheme {
+  id: number;
+  name: string;
+  role: 'main' | 'unpublished' | 'demo';
+  theme_store_id: number | null;
+  previewable: boolean;
+  processing: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ThemeAsset {
+  key: string;
+  public_url: string | null;
+  value?: string;
+  content_type: string;
+  size: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ShopifyCollection {
+  id: number;
+  handle: string;
+  title: string;
+  body_html: string | null;
+  image: { src: string } | null;
+  products_count: number;
+  published_at: string | null;
+}
+
+export interface ShopifyMenu {
+  id: number;
+  handle: string;
+  title: string;
+  items: Array<{
+    id: number;
+    title: string;
+    url: string;
+    type: string;
+    items?: any[];
+  }>;
+}
+
+/**
+ * Get all themes for the store
+ */
+export async function getThemes(): Promise<ShopifyTheme[]> {
+  try {
+    const response = await axios.get(`${BASE_URL}/themes.json`, {
+      headers: getHeaders(),
+    });
+    return response.data.themes || [];
+  } catch (error: any) {
+    console.error('[Shopify] Failed to fetch themes:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get the currently active (main) theme
+ */
+export async function getCurrentTheme(): Promise<ShopifyTheme | null> {
+  const themes = await getThemes();
+  return themes.find((t) => t.role === 'main') || null;
+}
+
+/**
+ * Get all assets for a theme
+ */
+export async function getThemeAssets(themeId: number): Promise<ThemeAsset[]> {
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/themes/${themeId}/assets.json`,
+      { headers: getHeaders() }
+    );
+    return response.data.assets || [];
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to fetch theme assets:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get a specific theme asset (file content)
+ */
+export async function getThemeAsset(
+  themeId: number,
+  assetKey: string
+): Promise<ThemeAsset | null> {
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/themes/${themeId}/assets.json?asset[key]=${encodeURIComponent(assetKey)}`,
+      { headers: getHeaders() }
+    );
+    return response.data.asset || null;
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    console.error(`[Shopify] Failed to fetch asset ${assetKey}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update or create a theme asset
+ */
+export async function updateThemeAsset(
+  themeId: number,
+  assetKey: string,
+  value: string
+): Promise<ThemeAsset> {
+  try {
+    const response = await axios.put(
+      `${BASE_URL}/themes/${themeId}/assets.json`,
+      {
+        asset: {
+          key: assetKey,
+          value: value,
+        },
+      },
+      { headers: getHeaders() }
+    );
+    console.log(`[Shopify] ✅ Updated theme asset: ${assetKey}`);
+    return response.data.asset;
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to update asset ${assetKey}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Delete a theme asset
+ */
+export async function deleteThemeAsset(
+  themeId: number,
+  assetKey: string
+): Promise<void> {
+  try {
+    await axios.delete(
+      `${BASE_URL}/themes/${themeId}/assets.json?asset[key]=${encodeURIComponent(assetKey)}`,
+      { headers: getHeaders() }
+    );
+    console.log(`[Shopify] ✅ Deleted theme asset: ${assetKey}`);
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to delete asset ${assetKey}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get all collections (smart + custom)
+ */
+export async function getCollections(): Promise<ShopifyCollection[]> {
+  try {
+    const [smartCollections, customCollections] = await Promise.all([
+      axios.get(`${BASE_URL}/smart_collections.json`, { headers: getHeaders() }),
+      axios.get(`${BASE_URL}/custom_collections.json`, { headers: getHeaders() }),
+    ]);
+    
+    return [
+      ...(smartCollections.data.smart_collections || []),
+      ...(customCollections.data.custom_collections || []),
+    ];
+  } catch (error: any) {
+    console.error('[Shopify] Failed to fetch collections:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update a collection
+ */
+export async function updateCollection(
+  collectionId: number,
+  data: {
+    title?: string;
+    body_html?: string;
+    image?: { src: string } | { attachment: string };
+  }
+): Promise<any> {
+  try {
+    // Try custom collection first, then smart collection
+    try {
+      const response = await axios.put(
+        `${BASE_URL}/custom_collections/${collectionId}.json`,
+        { custom_collection: { id: collectionId, ...data } },
+        { headers: getHeaders() }
+      );
+      return response.data.custom_collection;
+    } catch {
+      const response = await axios.put(
+        `${BASE_URL}/smart_collections/${collectionId}.json`,
+        { smart_collection: { id: collectionId, ...data } },
+        { headers: getHeaders() }
+      );
+      return response.data.smart_collection;
+    }
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to update collection ${collectionId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get navigation menus
+ */
+export async function getMenus(): Promise<ShopifyMenu[]> {
+  try {
+    const response = await axios.get(`${BASE_URL}/menus.json`, {
+      headers: getHeaders(),
+    });
+    return response.data.menus || [];
+  } catch (error: any) {
+    // Menus API might not be available on all plans
+    console.warn('[Shopify] Menus API not available:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get store metafields (for SEO data, etc.)
+ */
+export async function getStoreMetafields(): Promise<any[]> {
+  try {
+    const response = await axios.get(`${BASE_URL}/metafields.json`, {
+      headers: getHeaders(),
+    });
+    return response.data.metafields || [];
+  } catch (error: any) {
+    console.error('[Shopify] Failed to fetch store metafields:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Update a product (for SEO, descriptions, etc.)
+ */
+export async function updateProduct(
+  productId: string,
+  data: {
+    title?: string;
+    body_html?: string;
+    metafields_global_title_tag?: string;
+    metafields_global_description_tag?: string;
+    images?: Array<{ src?: string; attachment?: string; alt?: string }>;
+  }
+): Promise<any> {
+  if (!validateProductId(productId)) {
+    throw new Error(`Invalid product ID: ${productId}`);
+  }
+
+  try {
+    const response = await axios.put(
+      `${BASE_URL}/products/${encodeURIComponent(productId)}.json`,
+      { product: { id: productId, ...data } },
+      { headers: getHeaders() }
+    );
+    console.log(`[Shopify] ✅ Updated product ${productId}`);
+    return response.data.product;
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to update product ${productId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get shop info (for store-level settings)
+ */
+export async function getShopInfo(): Promise<any> {
+  try {
+    const response = await axios.get(`${BASE_URL}/shop.json`, {
+      headers: getHeaders(),
+    });
+    return response.data.shop;
+  } catch (error: any) {
+    console.error('[Shopify] Failed to fetch shop info:', error.message);
+    throw error;
+  }
+}
+

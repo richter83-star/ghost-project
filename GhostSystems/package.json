@@ -24,6 +24,7 @@
     "py:fmt": "python python/formatter.py"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.7",
     "body-parser": "^1.20.3",
     "cron": "^3.1.7",
@@ -33,15 +34,18 @@
     "fast-glob": "^3.3.2",
     "firebase": "^10.12.0",
     "firebase-admin": "^13.6.0",
+    "html-entities": "^2.5.2",
     "luxon": "^3.5.0",
     "markdown-it": "^14.1.0",
     "nanoid": "^5.0.7",
     "pg": "^8.13.0",
     "puppeteer": "^22.12.1",
+    "resend": "^4.0.0",
     "sqlite3": "^5.1.7",
     "stripe": "^16.0.0",
     "twitter-api-v2": "^1.17.2",
     "tsx": "^4.19.0",
+    "uuid": "^10.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
