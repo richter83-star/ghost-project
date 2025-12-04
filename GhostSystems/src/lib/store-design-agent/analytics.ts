@@ -4,6 +4,7 @@
  * Collects and analyzes store data to inform design recommendations.
  */
 
+import { decode } from 'html-entities';
 import {
   fetchProducts,
   fetchOrders,
@@ -15,6 +16,27 @@ import {
   validateConfig,
 } from '../shopify.js';
 import { StoreAnalytics } from './types.js';
+
+/**
+ * Safely strip HTML tags and decode entities from a string
+ * This prevents incomplete multi-character sanitization vulnerabilities
+ */
+function stripHtml(html: string): string {
+  if (!html) return '';
+  // First decode HTML entities
+  const decoded = decode(html, { level: 'html5' });
+  // Then remove all HTML tags (including malformed ones)
+  let text = decoded;
+  // Repeatedly strip tags until none remain (handles nested/malformed tags)
+  let previous = '';
+  while (previous !== text) {
+    previous = text;
+    text = text.replace(/<[^>]*>|<[^>]*$/g, '');
+  }
+  // Remove any remaining angle brackets that might be part of incomplete tags
+  text = text.replace(/[<>]/g, '');
+  return text.trim();
+}
 
 /**
  * Collect comprehensive store analytics
@@ -46,15 +68,13 @@ export async function collectStoreAnalytics(): Promise<StoreAnalytics | null> {
     // Analyze products
     const productsWithImages = products.filter((p: any) => p.images && p.images.length > 0);
     const productsWithDescriptions = products.filter((p: any) => {
-      const html = p.body_html || '';
-      const text = html.replace(/<[^>]*>/g, '').trim();
+      const text = stripHtml(p.body_html || '');
       return text.length >= 50;
     });
 
     const avgDescriptionLength = products.length > 0
       ? products.reduce((sum: number, p: any) => {
-          const html = p.body_html || '';
-          return sum + html.replace(/<[^>]*>/g, '').length;
+          return sum + stripHtml(p.body_html || '').length;
         }, 0) / products.length
       : 0;
 
@@ -75,8 +95,7 @@ export async function collectStoreAnalytics(): Promise<StoreAnalytics | null> {
     }
 
     const shortDescriptions = products.filter((p: any) => {
-      const html = p.body_html || '';
-      return html.replace(/<[^>]*>/g, '').length < 100;
+      return stripHtml(p.body_html || '').length < 100;
     }).length;
     if (shortDescriptions > 0) {
       seoIssues.push(`${shortDescriptions} products have short descriptions (<100 chars)`);
@@ -85,8 +104,7 @@ export async function collectStoreAnalytics(): Promise<StoreAnalytics | null> {
     // Analyze collections
     const collectionsWithImages = collections.filter((c: any) => c.image?.src).length;
     const collectionsWithDescriptions = collections.filter((c: any) => {
-      const html = c.body_html || '';
-      return html.replace(/<[^>]*>/g, '').trim().length > 0;
+      return stripHtml(c.body_html || '').length > 0;
     }).length;
 
     // Calculate sales by product

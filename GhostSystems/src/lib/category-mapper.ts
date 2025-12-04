@@ -47,12 +47,14 @@ export function inferCategory(title: string, productType?: string): string {
   }
   
   // Automation kits
+  // Note: We check for 'make' as a word (automation tool) not as a URL substring
+  // to avoid URL substring sanitization issues
   if (
     lowerTitle.includes('automation') ||
     lowerTitle.includes('workflow') ||
     lowerTitle.includes('zapier') ||
     lowerTitle.includes('n8n') ||
-    lowerTitle.includes('make.com') ||
+    /\bmake\b/.test(lowerTitle) || // Match 'make' as whole word only
     lowerTitle.includes('kit') ||
     lowerTitle.includes('crm') ||
     lowerTitle.includes('integration') ||

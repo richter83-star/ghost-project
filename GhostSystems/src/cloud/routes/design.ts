@@ -170,6 +170,10 @@ router.get('/recommendations/:id/preview', async (req, res) => {
     }
 
     // Return HTML preview for GET requests
+    // Escape all user-controlled content to prevent XSS
+    const escapedFiles = preview.affectedFiles.map(f => escapeHtml(f)).join(', ');
+    const escapedId = escapeHtml(req.params.id);
+    
     res.send(`
       <html>
         <head>
@@ -191,7 +195,7 @@ router.get('/recommendations/:id/preview', async (req, res) => {
         </head>
         <body>
           <h1>👁 Preview Changes</h1>
-          <p><strong>Affected files:</strong> ${preview.affectedFiles.join(', ')}</p>
+          <p><strong>Affected files:</strong> ${escapedFiles}</p>
           
           <div class="diff">
             <div class="before">
@@ -205,8 +209,8 @@ router.get('/recommendations/:id/preview', async (req, res) => {
           </div>
           
           <div class="actions">
-            <a href="/api/design/recommendations/${req.params.id}/approve" class="btn btn-approve">✓ Approve & Apply</a>
-            <a href="/api/design/recommendations/${req.params.id}/reject" class="btn btn-reject">✗ Reject</a>
+            <a href="/api/design/recommendations/${escapedId}/approve" class="btn btn-approve">✓ Approve & Apply</a>
+            <a href="/api/design/recommendations/${escapedId}/reject" class="btn btn-reject">✗ Reject</a>
           </div>
         </body>
       </html>

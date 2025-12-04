@@ -4,6 +4,7 @@
  * Applies design changes to Shopify theme with backup/rollback support.
  */
 
+import { decode } from 'html-entities';
 import {
   getCurrentTheme,
   getThemeAsset,
@@ -18,6 +19,22 @@ import {
 import { saveThemeBackup, getThemeBackup } from './approval-queue.js';
 import { DesignRecommendation, ThemeBackup } from './types.js';
 import { generateCopy } from './designer.js';
+
+/**
+ * Safely strip HTML tags and decode entities from a string
+ */
+function stripHtml(html: string): string {
+  if (!html) return '';
+  const decoded = decode(html, { level: 'html5' });
+  let text = decoded;
+  let previous = '';
+  while (previous !== text) {
+    previous = text;
+    text = text.replace(/<[^>]*>|<[^>]*$/g, '');
+  }
+  text = text.replace(/[<>]/g, '');
+  return text.trim();
+}
 
 /**
  * Apply a design recommendation
@@ -175,7 +192,7 @@ async function enhanceProductDescriptions(
   let updated = 0;
 
   for (const product of products) {
-    const currentLength = (product.body_html || '').replace(/<[^>]*>/g, '').length;
+    const currentLength = stripHtml(product.body_html || '').length;
     
     if (currentLength < minLength) {
       const enhancedDescription = await generateCopy('product_description', {

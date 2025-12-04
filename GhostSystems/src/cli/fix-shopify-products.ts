@@ -9,6 +9,7 @@
 
 import 'dotenv/config';
 import axios from 'axios';
+import { decode } from 'html-entities';
 import { fetchProducts } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
 import { generateDescription } from '../lib/gemini.js';
@@ -94,38 +95,24 @@ async function updateProductCategory(productId: string, category: string): Promi
 /**
  * Safely extract plain text from HTML for length validation
  * Removes HTML tags and decodes HTML entities to prevent injection
+ * Uses html-entities library for complete and secure decoding
  */
 function extractPlainText(html: string): string {
   if (!html || typeof html !== 'string') return '';
   
-  // Step 1: Remove all HTML tags
-  let text = html.replace(/<[^>]*>/g, '');
+  // Step 1: Decode HTML entities first using secure library
+  const decoded = decode(html, { level: 'html5' });
   
-  // Step 2: Decode HTML entities to get plain text (prevents injection)
-  const entityMap: Record<string, string> = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#039;': "'",
-    '&apos;': "'",
-    '&nbsp;': ' ',
-    '&hellip;': '...',
-    '&mdash;': '—',
-    '&ndash;': '–',
-  };
+  // Step 2: Remove all HTML tags (repeatedly to handle nested/malformed tags)
+  let text = decoded;
+  let previous = '';
+  while (previous !== text) {
+    previous = text;
+    text = text.replace(/<[^>]*>|<[^>]*$/g, '');
+  }
   
-  // Replace named entities
-  Object.entries(entityMap).forEach(([entity, char]) => {
-    text = text.replace(new RegExp(entity, 'gi'), char);
-  });
-  
-  // Replace numeric entities (&#123; and &#x7B;)
-  text = text.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
-  text = text.replace(/&#x([a-f\d]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-  
-  // Remove any remaining unrecognized entities
-  text = text.replace(/&[a-z]+;/gi, '');
+  // Step 3: Remove any remaining angle brackets that could be from incomplete tags
+  text = text.replace(/[<>]/g, '');
   
   return text.trim();
 }
