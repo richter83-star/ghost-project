@@ -10,6 +10,7 @@ export * from './designer.js';
 export * from './approval-queue.js';
 export * from './notifications.js';
 export * from './theme-modifier.js';
+export * from './brand-analyzer.js';
 
 import { collectStoreAnalytics } from './analytics.js';
 import { generateRecommendations } from './designer.js';

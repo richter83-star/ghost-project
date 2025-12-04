@@ -2,6 +2,7 @@
  * Store Design Agent - AI Design Recommendation Generator
  * 
  * Uses Gemini AI to analyze store data and generate design recommendations.
+ * Now includes brand analysis from store logo for aligned recommendations.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -12,17 +13,53 @@ import {
   RecommendationType,
   RecommendationPriority,
 } from './types.js';
+import { getBrandProfile, generateBrandPrompt, BrandProfile } from './brand-analyzer.js';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
+// Cache brand profile to avoid re-analyzing on every run
+let cachedBrandProfile: BrandProfile | null = null;
+let brandProfileCacheTime: number = 0;
+const BRAND_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
 /**
- * Generate design recommendations based on store analytics
+ * Get cached brand profile or fetch new one
+ */
+async function getCachedBrandProfile(): Promise<BrandProfile | null> {
+  const now = Date.now();
+  
+  // Return cached if still valid
+  if (cachedBrandProfile && (now - brandProfileCacheTime) < BRAND_CACHE_DURATION) {
+    return cachedBrandProfile;
+  }
+  
+  // Fetch new brand profile
+  console.log('[DesignAgent] 🎨 Analyzing brand from logo...');
+  try {
+    cachedBrandProfile = await getBrandProfile();
+    brandProfileCacheTime = now;
+    return cachedBrandProfile;
+  } catch (error: any) {
+    console.warn('[DesignAgent] Brand analysis failed:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Generate design recommendations based on store analytics and brand identity
  */
 export async function generateRecommendations(
   analytics: StoreAnalytics,
   minConfidence: number = 0.7
 ): Promise<DesignRecommendation[]> {
   console.log('[DesignAgent] 🧠 Generating design recommendations...');
+  
+  // Get brand profile (from logo analysis)
+  const brandProfile = await getCachedBrandProfile();
+  if (brandProfile) {
+    console.log(`[DesignAgent] 🎨 Using brand profile: ${brandProfile.style.aesthetic} / ${brandProfile.style.mood}`);
+    console.log(`[DesignAgent] 🎨 Brand colors: ${brandProfile.colors.primary}, ${brandProfile.colors.secondary}`);
+  }
   
   const recommendations: DesignRecommendation[] = [];
 
@@ -31,8 +68,8 @@ export async function generateRecommendations(
   recommendations.push(...generateProductRecommendations(analytics));
   recommendations.push(...generateCollectionRecommendations(analytics));
   
-  // AI-powered recommendations
-  const aiRecommendations = await generateAIRecommendations(analytics);
+  // AI-powered recommendations (now with brand context)
+  const aiRecommendations = await generateAIRecommendations(analytics, brandProfile);
   recommendations.push(...aiRecommendations);
 
   // Filter by confidence threshold
@@ -276,8 +313,12 @@ function generateCollectionRecommendations(analytics: StoreAnalytics): DesignRec
 
 /**
  * Generate AI-powered recommendations using Gemini
+ * Now includes brand profile for aligned recommendations
  */
-async function generateAIRecommendations(analytics: StoreAnalytics): Promise<DesignRecommendation[]> {
+async function generateAIRecommendations(
+  analytics: StoreAnalytics,
+  brandProfile: BrandProfile | null
+): Promise<DesignRecommendation[]> {
   if (!process.env.GEMINI_API_KEY) {
     console.warn('[DesignAgent] GEMINI_API_KEY not set, skipping AI recommendations');
     return [];
@@ -286,9 +327,14 @@ async function generateAIRecommendations(analytics: StoreAnalytics): Promise<Des
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `You are an expert e-commerce store designer and conversion optimizer.
+    // Build brand context section
+    const brandContext = brandProfile ? `
+${generateBrandPrompt(brandProfile)}
+` : '';
 
-Analyze this store data and suggest 2-3 specific design improvements:
+    const prompt = `You are an expert e-commerce store designer and conversion optimizer.
+${brandContext}
+Analyze this store data and suggest 2-3 specific design improvements that ALIGN WITH THE BRAND PROFILE above:
 
 STORE DATA:
 - Products: ${analytics.products.total} total, ${analytics.products.withImages} with images
@@ -301,13 +347,14 @@ STORE DATA:
 - SEO Issues: ${analytics.seo.issues.join(', ') || 'None identified'}
 - Top selling products: ${analytics.products.topPerformers.slice(0, 3).map(p => p.title).join(', ') || 'No sales data'}
 
-For each recommendation, provide:
+For each recommendation:
 1. Type: one of [homepage, product_page, collection, navigation, seo, brand, copy, image]
 2. Priority: high/medium/low
 3. Title: short actionable title
-4. Description: why this matters
+4. Description: why this matters AND how it aligns with the brand
 5. Estimated impact: percentage improvement (be realistic)
 6. Confidence: 0-1 scale
+${brandProfile ? `7. Include specific color codes (${brandProfile.colors.primary}, ${brandProfile.colors.secondary}, ${brandProfile.colors.accent}) and font suggestions (${brandProfile.typography.recommended.join(', ')}) where relevant` : ''}
 
 Respond in JSON format:
 [
@@ -321,7 +368,7 @@ Respond in JSON format:
   }
 ]
 
-Focus on actionable, high-impact changes. Be specific.`;
+Focus on actionable, high-impact changes that match the brand identity. Be specific with colors, fonts, and styling.`;
 
     const result = await model.generateContent(prompt);
     const response = result.response.text();
