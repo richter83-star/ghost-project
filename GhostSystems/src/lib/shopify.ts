@@ -556,6 +556,76 @@ export async function updateCollection(
 }
 
 /**
+ * Create a custom collection
+ */
+export async function createCollection(data: {
+  title: string;
+  body_html?: string;
+  sort_order?: string;
+  image?: { src: string } | { attachment: string };
+}): Promise<any> {
+  // Validate title
+  const sanitizedTitle = sanitizeString(data.title, 255);
+  if (!sanitizedTitle) {
+    throw new Error('Collection title is required');
+  }
+  
+  // Sanitize body_html if provided
+  const sanitizedBody = data.body_html ? sanitizeString(data.body_html, 16000) : undefined;
+  
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/custom_collections.json`,
+      { 
+        custom_collection: { 
+          title: sanitizedTitle,
+          body_html: sanitizedBody,
+          sort_order: data.sort_order || 'best-selling',
+          published: true,
+        } 
+      },
+      { headers: getHeaders() }
+    );
+    console.log(`[Shopify] Created collection: ${sanitizedTitle}`);
+    return response.data.custom_collection;
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to create collection:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Add a product to a collection (via Collect)
+ */
+export async function addProductToCollection(productId: number, collectionId: number): Promise<any> {
+  if (!validateProductId(String(productId)) || !validateProductId(String(collectionId))) {
+    throw new Error(`Invalid product or collection ID`);
+  }
+  
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/collects.json`,
+      { 
+        collect: { 
+          product_id: productId,
+          collection_id: collectionId,
+        } 
+      },
+      { headers: getHeaders() }
+    );
+    return response.data.collect;
+  } catch (error: any) {
+    // If product is already in collection, that's fine
+    if (error.response?.status === 422) {
+      console.log(`[Shopify] Product ${productId} already in collection ${collectionId}`);
+      return null;
+    }
+    console.error(`[Shopify] Failed to add product to collection:`, error.message);
+    throw error;
+  }
+}
+
+/**
  * Get navigation menus
  */
 export async function getMenus(): Promise<ShopifyMenu[]> {

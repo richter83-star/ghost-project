@@ -791,7 +791,7 @@ router.post('/fix-images', async (req, res) => {
     };
     
     // Fetch all products
-    const products = await fetchProducts(100);
+    const products = await fetchProducts();
     console.log(`[DesignAgent] Found ${products.length} products`);
     
     let fixed = 0;
@@ -863,6 +863,127 @@ router.post('/fix-images', async (req, res) => {
     });
   } catch (error: any) {
     console.error('[DesignAgent] Image fix failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * List all products with their categories/types
+ * GET /api/design/products
+ */
+router.get('/products', async (req, res) => {
+  try {
+    const { fetchProducts, getCollections } = await import('../../lib/shopify.js');
+    
+    const [products, collections] = await Promise.all([
+      fetchProducts(),
+      getCollections()
+    ]);
+    
+    // Group products by product_type
+    const byType: Record<string, any[]> = {};
+    for (const product of products) {
+      const type = product.product_type || 'Uncategorized';
+      if (!byType[type]) byType[type] = [];
+      byType[type].push({
+        id: product.id,
+        title: product.title,
+        product_type: product.product_type,
+        vendor: product.vendor,
+        status: product.status,
+        images: product.images?.length || 0,
+        hasPlaceholderImage: product.images?.[0]?.src?.includes('placeholder') || 
+                             product.images?.[0]?.src?.includes('picsum') || false,
+      });
+    }
+    
+    res.json({
+      totalProducts: products.length,
+      productTypes: Object.keys(byType),
+      byType,
+      collections: collections.map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        productsCount: c.products_count || 0,
+      })),
+    });
+  } catch (error: any) {
+    console.error('[DesignAgent] Products list failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Create collections based on product types
+ * POST /api/design/organize-collections
+ */
+router.post('/organize-collections', async (req, res) => {
+  try {
+    const { fetchProducts, getCollections, createCollection, updateProduct } = await import('../../lib/shopify.js');
+    
+    const products = await fetchProducts();
+    const existingCollections = await getCollections();
+    
+    // Group products by product_type
+    const byType: Record<string, any[]> = {};
+    for (const product of products) {
+      const type = product.product_type || 'General';
+      if (!byType[type]) byType[type] = [];
+      byType[type].push(product);
+    }
+    
+    const results: any[] = [];
+    
+    for (const [productType, typeProducts] of Object.entries(byType)) {
+      // Check if collection already exists
+      const existingCollection = existingCollections.find(
+        (c: any) => c.title.toLowerCase() === productType.toLowerCase()
+      );
+      
+      if (existingCollection) {
+        results.push({
+          type: productType,
+          action: 'exists',
+          collectionId: existingCollection.id,
+          products: typeProducts.length,
+        });
+        continue;
+      }
+      
+      // Create new collection
+      try {
+        const newCollection = await createCollection({
+          title: productType,
+          body_html: `<p>Browse our ${productType} collection.</p>`,
+          sort_order: 'best-selling',
+        });
+        
+        results.push({
+          type: productType,
+          action: 'created',
+          collectionId: newCollection?.id,
+          products: typeProducts.length,
+        });
+        
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (err: any) {
+        results.push({
+          type: productType,
+          action: 'failed',
+          error: err.message,
+          products: typeProducts.length,
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Collections organized',
+      results,
+    });
+  } catch (error: any) {
+    console.error('[DesignAgent] Organize collections failed:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
