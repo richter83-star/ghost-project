@@ -759,107 +759,90 @@ router.post('/fix-images', async (req, res) => {
   try {
     console.log('[DesignAgent] 🖼️ Fixing product images...');
     
-    const { fetchProducts } = await import('../../lib/shopify.js');
+    const { fetchProducts, updateProduct } = await import('../../lib/shopify.js');
     const axios = (await import('axios')).default;
     
-    const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
-    const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
-    const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-01';
-    const BASE_URL = `https://${SHOPIFY_STORE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '')}/admin/api/${SHOPIFY_API_VERSION}`;
-    
-    const getHeaders = () => ({
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
-    });
-    
     // Check if image is a placeholder (Shopify placeholder or missing)
-    const isPlaceholder = (images: any[]) => {
+    const needsImage = (images: any[]) => {
       if (!images || images.length === 0) return true;
-      // Check if image is a Shopify placeholder SVG
       const src = images[0]?.src || '';
       if (src.includes('placeholder') || src.includes('no-image') || src.includes('gift-card')) return true;
+      if (src.includes('picsum')) return true; // Also replace picsum placeholders
       return false;
     };
     
-    // Dark tech image categories for different product types
-    const getImageForProduct = (title: string, productType: string) => {
-      const titleLower = (title + ' ' + productType).toLowerCase();
-      const seed = Math.abs(title.split('').reduce((a, b) => a + b.charCodeAt(0), 0));
-      
-      // Use grayscale images for dark theme consistency
+    // Get a deterministic image URL based on product title
+    const getImageUrl = (title: string, index: number) => {
+      const seed = Math.abs(title.split('').reduce((a, b) => a + b.charCodeAt(0), 0)) + index;
       return `https://picsum.photos/seed/${seed}/800/800?grayscale`;
     };
     
     // Fetch all products
-    const products = await fetchProducts();
-    console.log(`[DesignAgent] Found ${products.length} products`);
+    const allProducts = await fetchProducts();
+    console.log(`[DesignAgent] Found ${allProducts.length} products`);
+    
+    const forceReplace = req.query.force === 'true';
+    const limit = parseInt(req.query.limit as string) || allProducts.length;
+    
+    // Filter and limit products
+    const productsToProcess = allProducts
+      .filter((p: any) => forceReplace || needsImage(p.images))
+      .slice(0, limit);
+    
+    console.log(`[DesignAgent] Processing ${productsToProcess.length} products (force=${forceReplace}, limit=${limit})`);
     
     let fixed = 0;
-    let skipped = 0;
     let failed = 0;
-    const forceReplace = req.query.force === 'true';
+    const results: any[] = [];
     
-    for (const product of products) {
-      // Check if product needs image update
-      const needsImage = isPlaceholder(product.images) || forceReplace;
-      
-      if (!needsImage) {
-        skipped++;
-        continue;
-      }
-      
-      console.log(`[DesignAgent] Updating image for: ${product.title}`);
+    for (let i = 0; i < productsToProcess.length; i++) {
+      const product = productsToProcess[i];
+      console.log(`[DesignAgent] [${i + 1}/${productsToProcess.length}] Processing: ${product.title}`);
       
       try {
-        const imageUrl = getImageForProduct(product.title, product.product_type || '');
+        // Fetch image and convert to base64
+        const imageUrl = getImageUrl(product.title, i);
+        console.log(`[DesignAgent] Fetching image from: ${imageUrl}`);
         
-        // Delete existing placeholder images first
-        if (product.images && product.images.length > 0) {
-          for (const img of product.images) {
-            try {
-              await axios.delete(
-                `${BASE_URL}/products/${product.id}/images/${img.id}.json`,
-                { headers: getHeaders() }
-              );
-            } catch (e) {
-              // Ignore delete errors
-            }
-          }
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        const imageResponse = await axios.get(imageUrl, { 
+          responseType: 'arraybuffer',
+          timeout: 30000,
+        });
         
-        // Add new image
-        await axios.post(
-          `${BASE_URL}/products/${product.id}/images.json`,
-          {
-            image: {
-              src: imageUrl,
-              alt: product.title,
-            },
-          },
-          { headers: getHeaders() }
-        );
+        const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
+        console.log(`[DesignAgent] Image fetched, size: ${Math.round(base64Image.length / 1024)}KB`);
+        
+        // Update product with new image
+        await updateProduct(product.id, {
+          images: [{ attachment: base64Image }],
+        });
         
         fixed++;
+        results.push({ id: product.id, title: product.title, status: 'success' });
         console.log(`[DesignAgent] ✅ Fixed image for: ${product.title}`);
         
         // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (error: any) {
         failed++;
+        results.push({ id: product.id, title: product.title, status: 'failed', error: error.message });
         console.error(`[DesignAgent] ❌ Failed for ${product.title}:`, error.message);
+        
+        // Continue with shorter delay on failure
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
-    console.log(`[DesignAgent] ✅ Image fix complete: ${fixed} fixed, ${skipped} skipped, ${failed} failed`);
+    console.log(`[DesignAgent] ✅ Image fix complete: ${fixed} fixed, ${failed} failed`);
     
     res.json({
       success: true,
       fixed,
-      skipped,
       failed,
-      total: products.length,
-      message: forceReplace ? 'Replaced all images' : 'Fixed placeholder images',
+      skipped: allProducts.length - productsToProcess.length,
+      total: productsToProcess.length,
+      message: `Fixed ${fixed} images, ${failed} failed`,
+      results: results.length <= 20 ? results : undefined, // Only include results if small batch
     });
   } catch (error: any) {
     console.error('[DesignAgent] Image fix failed:', error.message);
