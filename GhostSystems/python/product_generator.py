@@ -4,12 +4,14 @@ import json
 import logging
 import requests
 import time
-import shopify
 import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 import threading
 # from flask import Flask # <-- REMOVED
+#
+# NOTE: Shopify integration has been removed and consolidated into GhostSystems/ Node.js service.
+# This script now only handles Printful product creation.
 
 # --- Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,10 +50,8 @@ VARIANT_MAP = {
 }
 
 # --- Shopify Config ---
-SHOPIFY_STORE_URL = os.environ.get("SHOPIFY_STORE_URL")
-SHOPIFY_API_KEY = os.environ.get("SHOPIFY_API_KEY")
-SHOPIFY_API_PASSWORD = os.environ.get("SHOPIFY_API_PASSWORD")
-SHOPIFY_API_VERSION = "2024-04"
+# REMOVED: Shopify integration has been moved to GhostSystems/src/integrations/shopify-pipeline.ts
+# Digital products are now created via the Node.js unified service using REST Admin API
 
 # ==============================================================================
 # HELPER FUNCTION: PRINTFUL API POST
@@ -146,77 +146,18 @@ def create_printful_product(job_doc):
         return False
 
 # ==============================================================================
-# GHOST WORKER 2: CREATE DIGITAL PRODUCT
+# GHOST WORKER 2: CREATE DIGITAL PRODUCT (REMOVED)
 # ==============================================================================
-def create_digital_product(job_doc):
-    """Ghost worker for creating a digital product directly in Shopify."""
-    job_data = job_doc.to_dict()
-    title = job_data.get("title", "Untitled")
-    product_type = job_data.get("productType")
-
-    logging.info(f"--- ROUTE: DIGITAL PRODUCT ---")
-    logging.info(f"Initializing Shopify Ghost for product: {title}")
-
-    # 1. Check for Shopify credentials
-    if not all([SHOPIFY_STORE_URL, SHOPIFY_API_KEY, SHOPIFY_API_PASSWORD]):
-        logging.error("Shopify environment variables not set. Cannot create digital product.")
-        return False
-
-    # 2. Get Job Details
-    try:
-        description = job_data.get("description", "")
-        price = job_data["price"]
-        auto_publish = job_data.get("autoPublish", False)
-    except KeyError as e:
-        logging.error(f"Job data {job_doc.id} is missing required key: {e}.")
-        return False
-
-    try:
-        # 3. Activate Shopify API session
-        shop_url = f"https://{SHOPIFY_API_KEY}:{SHOPIFY_API_PASSWORD}@{SHOPIFY_STORE_URL}/admin/api/{SHOPIFY_API_VERSION}"
-        shopify.Shop.set_site(shop_url)
-        
-        # 4. Create a new Product object
-        new_product = shopify.Product()
-        new_product.title = title
-        new_product.body_html = description
-        new_product.product_type = "AI Prompt Package"
-        new_product.vendor = "NexusAI"
-        
-        # 5. Set price and mark as digital (no shipping)
-        new_product.variants = [
-            shopify.Variant({
-                'price': price,
-                'requires_shipping': False,
-                'taxable': False 
-            })
-        ]
-        
-        # 6. Set publish status
-        new_produc_status = "active" if auto_publish else "draft"
-        new_product.status = new_produc_status
-        status_string = "published (active)" if auto_publish else "draft"
-        
-        # 7. Save the product to Shopify
-        if new_product.save():
-            logging.info(f"Successfully created Shopify product ID: {new_product.id}")
-            logging.info(f"Product was saved as {status_string} in your Shopify store.")
-            
-            # 8. (Optional) Add image to digital product if one was provided
-            if job_data.get("imageUrl"):
-                logging.info("Image URL found, adding to digital product...")
-                new_product.images = [
-                    {'src': job_data.get("imageUrl")}
-                ]
-                new_product.save()
-            return True
-        else:
-            logging.error(f"Failed to save Shopify product: {new_product.errors.full_messages()}")
-            return False
-
-    except Exception as e:
-        logging.error(f"Error connecting to Shopify or creating product: {e}")
-        return False
+# REMOVED: Shopify digital product creation has been consolidated into:
+#   GhostSystems/src/integrations/shopify-pipeline.ts
+#
+# The Node.js service handles all Shopify product creation using the REST Admin API.
+# This Python script now only handles Printful products.
+#
+# If you need to create digital products, they should be created via:
+#   1. Firestore document with status: "pending"
+#   2. Nexus listener moves to status: "draft"
+#   3. Shopify pipeline publishes to Shopify with status: "published"
 
 # ==============================================================================
 # MAIN EXECUTION: JOB ROUTER
@@ -248,7 +189,12 @@ def process_job(job_doc):
             success = create_printful_product(job_doc)
             
         elif product_type == "AI Prompt Package":
-            success = create_digital_product(job_doc)
+            # REMOVED: Digital products are now handled by GhostSystems Node.js service
+            # See: GhostSystems/src/integrations/shopify-pipeline.ts
+            logging.warning(f"Product type '{product_type}' is no longer handled by Python script.")
+            logging.info("Digital products should be created via the unified Node.js service in GhostSystems/")
+            logging.info("The Shopify pipeline will automatically publish products with status: 'draft'")
+            success = False # Mark as failed so it can be routed to Node.js service
             
         elif product_type == "Tech Gadget":
             logging.warning(f"Product type '{product_type}' is not yet supported. Job will be marked as 'failed'.")

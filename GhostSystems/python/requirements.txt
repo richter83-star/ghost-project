@@ -1,7 +1,7 @@
 openai>=1.46.0
 markdownify>=0.12.1
 python-slugify>=8.0.4
-ShopifyAPI==6.0.1
+# ShopifyAPI==6.0.1  # REMOVED: Shopify integration moved to Node.js service
 firebase-admin
 requests
 google-cloud-firestore
