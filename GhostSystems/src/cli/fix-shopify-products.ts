@@ -97,12 +97,52 @@ async function updateProductCategory(productId: string, productType: string): Pr
 }
 
 /**
+ * Safely extract plain text from HTML for length validation
+ * Removes HTML tags and decodes HTML entities to prevent injection
+ */
+function extractPlainText(html: string): string {
+  if (!html || typeof html !== 'string') return '';
+  
+  // Step 1: Remove all HTML tags
+  let text = html.replace(/<[^>]*>/g, '');
+  
+  // Step 2: Decode HTML entities to get plain text (prevents injection)
+  const entityMap: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#039;': "'",
+    '&apos;': "'",
+    '&nbsp;': ' ',
+    '&hellip;': '...',
+    '&mdash;': '—',
+    '&ndash;': '–',
+  };
+  
+  // Replace named entities
+  Object.entries(entityMap).forEach(([entity, char]) => {
+    text = text.replace(new RegExp(entity, 'gi'), char);
+  });
+  
+  // Replace numeric entities (&#123; and &#x7B;)
+  text = text.replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)));
+  text = text.replace(/&#x([a-f\d]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  
+  // Remove any remaining unrecognized entities
+  text = text.replace(/&[a-z]+;/gi, '');
+  
+  return text.trim();
+}
+
+/**
  * Check if description is usable (has minimum length)
  */
 function isDescriptionUsable(description: string | null | undefined): boolean {
   if (!description) return false;
-  const text = description.replace(/<[^>]*>/g, '').trim(); // Remove HTML tags
-  return text.length >= 150; // Minimum 150 characters
+  // Extract plain text safely (no HTML tags or entities)
+  const plainText = extractPlainText(description);
+  return plainText.length >= 150; // Minimum 150 characters
 }
 
 /**
