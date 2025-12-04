@@ -80,31 +80,67 @@ export async function generateDescription(
 }
 
 /**
+ * Generate product-type-specific image prompts
+ */
+function getImagePromptForProductType(title: string, productType: string): string {
+  const basePrompt = `Professional digital product cover art, clean modern design, high contrast, no text or watermarks`;
+  
+  const typePrompts: Record<string, string> = {
+    'prompt_pack': `${basePrompt}, neon cyberpunk aesthetic, dark background with glowing accents, futuristic digital artwork style, abstract geometric patterns, representing "${title}"`,
+    'automation_kit': `${basePrompt}, tech workflow diagram aesthetic, clean professional design, blue and white color scheme, interconnected nodes and lines, circuit board inspired, representing "${title}"`,
+    'bundle': `${basePrompt}, premium package mockup, luxury aesthetic, dark elegant background, gold accents, multiple product showcase, high-end digital bundle, representing "${title}"`,
+    'Digital Artwork': `${basePrompt}, artistic digital illustration, vibrant colors, creative design, abstract elements, representing "${title}"`,
+    'Digital Services': `${basePrompt}, professional service visualization, clean business aesthetic, blue tones, modern minimalist, representing "${title}"`,
+    'Digital Bundle': `${basePrompt}, premium bundle display, multiple items showcase, elegant presentation, dark background with highlights, representing "${title}"`,
+  };
+  
+  // Find matching prompt or use default
+  const matchedType = Object.keys(typePrompts).find(
+    key => productType.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(productType.toLowerCase())
+  );
+  
+  if (matchedType) {
+    return typePrompts[matchedType];
+  }
+  
+  // Default prompt for unknown types
+  return `${basePrompt}, sleek digital product visualization, modern tech aesthetic, gradient background, representing "${title}"`;
+}
+
+/**
  * Generate product image using Imagen (via Gemini API)
- * @param prompt - Image generation prompt
+ * @param title - Product title
+ * @param productType - Product type for specialized prompts
  * @returns Promise<string> - Base64 encoded image data
  */
-export async function generateImage(prompt: string): Promise<string> {
+export async function generateImage(title: string, productType: string = 'digital'): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY environment variable is not set');
   }
 
   const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GEMINI_API_KEY}`;
+  
+  // Get product-type-specific prompt
+  const imagePrompt = getImagePromptForProductType(title, productType);
+  console.log(`[Gemini] Generating image with prompt: ${imagePrompt.substring(0, 100)}...`);
 
   const payload = {
     instances: [
       {
-        prompt: `A stunning, high-resolution 8k, commercial product photo, on a clean studio background, of: ${prompt}`,
+        prompt: imagePrompt,
       },
     ],
     parameters: {
       sampleCount: 1,
+      aspectRatio: '1:1', // Square images for product listings
+      safetyFilterLevel: 'block_some',
     },
   };
 
   try {
     const response = await axios.post(imageApiUrl, payload, {
       headers: { 'Content-Type': 'application/json' },
+      timeout: 60000, // 60 second timeout for image generation
     });
 
     const base64ImageData =
@@ -120,10 +156,39 @@ export async function generateImage(prompt: string): Promise<string> {
       );
     }
 
+    console.log(`[Gemini] ✅ Image generated successfully (${Math.round(base64ImageData.length / 1024)}KB)`);
     return base64ImageData;
   } catch (error: any) {
-    console.error('[Gemini] Failed to generate image:', error.message);
+    const errorDetails = error.response?.data || error.message;
+    console.error('[Gemini] Failed to generate image:', errorDetails);
     throw new Error(`Failed to generate image: ${error.message}`);
+  }
+}
+
+/**
+ * Generate product image with fallback to placeholder
+ * @param title - Product title
+ * @param productType - Product type
+ * @returns Promise<{ base64?: string; url?: string }> - Either base64 data or fallback URL
+ */
+export async function generateProductImage(
+  title: string,
+  productType: string
+): Promise<{ base64?: string; url?: string; source: 'ai' | 'placeholder' }> {
+  // Check if Imagen is enabled
+  const enableImagen = process.env.ENABLE_AI_IMAGES !== 'false';
+  
+  if (!enableImagen || !GEMINI_API_KEY) {
+    console.log('[Gemini] AI image generation disabled or no API key, using placeholder');
+    return { source: 'placeholder' };
+  }
+  
+  try {
+    const base64 = await generateImage(title, productType);
+    return { base64, source: 'ai' };
+  } catch (error: any) {
+    console.warn(`[Gemini] Image generation failed, falling back to placeholder: ${error.message}`);
+    return { source: 'placeholder' };
   }
 }
 

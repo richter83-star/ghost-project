@@ -4,6 +4,7 @@ import { startNexusListener } from './integrations/nexus/listener.js';
 import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
 import { startAdaptiveAIListener } from './integrations/adaptive-ai/listener.js';
+import { startDynamicPricingListener, getDynamicPricingStatus, triggerPricingOptimization } from './integrations/dynamic-pricing/listener.js';
 
 // Initialize Express
 const app = express();
@@ -20,6 +21,8 @@ async function main() {
   // The log [FleetController] live on port 10000 comes from here.
   // ---------------------------------------------------------
   app.get('/', (req, res) => {
+    const pricingStatus = getDynamicPricingStatus();
+    
     res.status(200).json({
       system: 'Ghost Fleet Controller',
       status: 'Online',
@@ -28,8 +31,22 @@ async function main() {
         nexus: 'active',
         shopifyPipeline: 'active',
         webhooks: 'active',
+        adaptiveAI: process.env.ENABLE_ADAPTIVE_AI === 'true' ? 'active' : 'disabled',
+        abandonedCartRecovery: process.env.ENABLE_ABANDONED_CART === 'true' ? 'active' : 'disabled',
+        dynamicPricing: pricingStatus.enabled ? 'active' : 'disabled',
+        aiImages: process.env.ENABLE_AI_IMAGES !== 'false' ? 'active' : 'disabled',
       },
+      dynamicPricing: pricingStatus,
     });
+  });
+
+  // API endpoint to manually trigger pricing optimization
+  app.post('/api/pricing/optimize', express.json(), async (req, res) => {
+    const dryRun = req.body?.dryRun === true;
+    console.log(`[API] Manual pricing optimization triggered (dryRun: ${dryRun})`);
+    
+    const result = await triggerPricingOptimization(dryRun);
+    res.json(result);
   });
 
   // ---------------------------------------------------------
@@ -76,6 +93,28 @@ async function main() {
   } else {
     console.log('[INIT] ℹ️ Adaptive AI disabled (set ENABLE_ADAPTIVE_AI=true to enable)');
   }
+
+  // ---------------------------------------------------------
+  // 5. Initialize Dynamic Pricing (Optional)
+  // Automatically adjusts prices based on sales performance
+  // ---------------------------------------------------------
+  if (process.env.ENABLE_DYNAMIC_PRICING === 'true') {
+    try {
+      console.log('[INIT] 💰 starting Dynamic Pricing Listener...');
+      startDynamicPricingListener();
+    } catch (error) {
+      console.error('[ERROR] Failed to start Dynamic Pricing listener:', error);
+    }
+  } else {
+    console.log('[INIT] ℹ️ Dynamic pricing disabled (set ENABLE_DYNAMIC_PRICING=true to enable)');
+  }
+
+  // Log feature status
+  console.log('[INIT] Feature Status:');
+  console.log(`  - AI Images: ${process.env.ENABLE_AI_IMAGES !== 'false' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Adaptive AI: ${process.env.ENABLE_ADAPTIVE_AI === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Abandoned Cart: ${process.env.ENABLE_ABANDONED_CART === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Dynamic Pricing: ${process.env.ENABLE_DYNAMIC_PRICING === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
 
   console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');
 }

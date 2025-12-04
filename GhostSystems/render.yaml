@@ -78,6 +78,26 @@ services:
       - key: ADAPTIVE_AI_CURATION_LEVEL
         value: 'default'
         sync: false
+      # AI Image Generation (uses Gemini Imagen)
+      - key: ENABLE_AI_IMAGES
+        value: 'true'
+        sync: false
+      # Abandoned Cart Recovery
+      - key: ENABLE_ABANDONED_CART
+        value: 'true'
+        sync: false
+      - key: ABANDONED_CART_DISCOUNT_CODE
+        value: 'COMEBACK10'
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      # Dynamic Pricing
+      - key: ENABLE_DYNAMIC_PRICING
+        value: 'true'
+        sync: false
+      - key: DYNAMIC_PRICING_INTERVAL_DAYS
+        value: '7'
+        sync: false
 
   # Optional background cron-runner (comment out if not needed)
   # All functionality is now in the main web service (ghostsystems)

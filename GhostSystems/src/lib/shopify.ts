@@ -52,14 +52,30 @@ export async function createProduct(productData: {
   productType: string;
   price: number;
   imageUrl?: string;
+  imageBase64?: string; // Base64 encoded image data (from AI generation)
 }): Promise<string> {
-  const { title, description, productType, price, imageUrl } = productData;
+  const { title, description, productType, price, imageUrl, imageBase64 } = productData;
 
   // Escape HTML in description to prevent XSS injection attacks
   const escapedDescription = escapeHtml(description);
   
   // Map product type to proper Shopify category
   const shopifyCategory = getBestCategory(title, productType);
+
+  // Build image payload - prefer base64 if available (AI-generated)
+  let imagesPayload: any = undefined;
+  if (imageBase64) {
+    // Use base64 attachment for AI-generated images
+    imagesPayload = [{
+      attachment: imageBase64,
+      filename: `${title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.png`,
+    }];
+    console.log(`[Shopify] Using AI-generated image (base64, ${Math.round(imageBase64.length / 1024)}KB)`);
+  } else if (imageUrl) {
+    // Use URL for placeholder images
+    imagesPayload = [{ src: imageUrl }];
+    console.log(`[Shopify] Using image URL: ${imageUrl.substring(0, 50)}...`);
+  }
 
   const shopifyProductPayload = {
     product: {
@@ -76,15 +92,14 @@ export async function createProduct(productData: {
           taxable: false,
         },
       ],
-      ...(imageUrl && {
-        images: [{ src: imageUrl }],
-      }),
+      ...(imagesPayload && { images: imagesPayload }),
     },
   };
 
   try {
     const response = await axios.post(`${BASE_URL}/products.json`, shopifyProductPayload, {
       headers: getHeaders(),
+      timeout: 60000, // 60 second timeout for large image uploads
     });
 
     if (!response.data?.product?.id) {
@@ -144,6 +159,92 @@ export async function fetchCustomers() {
     return response.data.customers || [];
   } catch (error: any) {
     console.error('[Shopify] Failed to fetch customers:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get product by ID with variants
+ */
+export async function getProductById(productId: string) {
+  if (!validateProductId(productId)) {
+    throw new Error(`Invalid product ID: ${productId}`);
+  }
+
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/products/${encodeURIComponent(productId)}.json`,
+      { headers: getHeaders() }
+    );
+    return response.data.product;
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to get product ${productId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update product variant price
+ * @param productId - Shopify product ID
+ * @param newPrice - New price in dollars
+ * @param variantId - Optional specific variant ID (uses first variant if not provided)
+ * @returns The updated variant data
+ */
+export async function updateProductPrice(
+  productId: string,
+  newPrice: number,
+  variantId?: string
+): Promise<{ success: boolean; oldPrice: number; newPrice: number; variantId: string }> {
+  if (!validateProductId(productId)) {
+    throw new Error(`Invalid product ID: ${productId}`);
+  }
+
+  if (newPrice <= 0 || newPrice > 9999) {
+    throw new Error(`Invalid price: ${newPrice}. Must be between 0 and 9999.`);
+  }
+
+  try {
+    // Get product to find variant ID if not provided
+    let targetVariantId = variantId;
+    let oldPrice = 0;
+
+    if (!targetVariantId) {
+      const product = await getProductById(productId);
+      if (!product.variants || product.variants.length === 0) {
+        throw new Error(`Product ${productId} has no variants`);
+      }
+      targetVariantId = String(product.variants[0].id);
+      oldPrice = parseFloat(product.variants[0].price) || 0;
+    }
+
+    // Update variant price
+    const response = await axios.put(
+      `${BASE_URL}/variants/${encodeURIComponent(targetVariantId!)}.json`,
+      {
+        variant: {
+          id: targetVariantId,
+          price: newPrice.toFixed(2),
+        },
+      },
+      { headers: getHeaders() }
+    );
+
+    if (!response.data?.variant?.id) {
+      throw new Error('Failed to update variant price');
+    }
+
+    console.log(
+      `[Shopify] ✅ Updated price for product ${productId}: $${oldPrice} → $${newPrice}`
+    );
+
+    return {
+      success: true,
+      oldPrice,
+      newPrice,
+      variantId: targetVariantId!,
+    };
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to update price for ${productId}:`, error.message);
     throw error;
   }
 }

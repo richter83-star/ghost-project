@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { fetchProductMetafield } from '../../lib/shopify.js';
+import { storeCheckout, markCheckoutRecovered, processAbandonedCarts } from '../../integrations/abandoned-cart/handler.js';
 
 const router = express.Router();
 
@@ -136,6 +137,7 @@ router.post(
       const order = JSON.parse(rawBody.toString('utf8'));
       const customerEmail = order.email;
       const lineItems = order.line_items || [];
+      const orderId = order.id || order.order_number;
 
       if (!customerEmail || lineItems.length === 0) {
         console.log(
@@ -145,8 +147,15 @@ router.post(
       }
 
       console.log(
-        `[ShopifyWebhook] Processing order for ${customerEmail} (${lineItems.length} items)...`
+        `[ShopifyWebhook] Processing order ${orderId} for ${customerEmail} (${lineItems.length} items)...`
       );
+
+      // Mark any abandoned cart as recovered
+      try {
+        await markCheckoutRecovered(String(orderId), customerEmail);
+      } catch (err: any) {
+        console.warn('[ShopifyWebhook] Could not mark cart recovered:', err.message);
+      }
 
       let emailHtmlContent = `
         <h1>Your Digital Goods</h1>
@@ -200,6 +209,87 @@ router.post(
     }
   }
 );
+
+/**
+ * Shopify checkout created/updated webhook
+ * Tracks checkouts for abandoned cart recovery
+ */
+router.post(
+  '/checkout-created',
+  webhookRateLimiter,
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const rawBody = req.body as Buffer;
+    const isVerified = verifyShopifyWebhook(req, rawBody);
+
+    if (!isVerified) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    res.status(200).send('OK');
+
+    try {
+      const checkout = JSON.parse(rawBody.toString('utf8'));
+      console.log(`[ShopifyWebhook] Checkout created: ${checkout.id || checkout.token}`);
+      await storeCheckout(checkout);
+    } catch (error: any) {
+      console.error('[ShopifyWebhook] ❌ Failed to process checkout:', error.message);
+    }
+  }
+);
+
+router.post(
+  '/checkout-updated',
+  webhookRateLimiter,
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const rawBody = req.body as Buffer;
+    const isVerified = verifyShopifyWebhook(req, rawBody);
+
+    if (!isVerified) {
+      return res.status(401).send('Unauthorized');
+    }
+
+    res.status(200).send('OK');
+
+    try {
+      const checkout = JSON.parse(rawBody.toString('utf8'));
+      console.log(`[ShopifyWebhook] Checkout updated: ${checkout.id || checkout.token}`);
+      await storeCheckout(checkout);
+    } catch (error: any) {
+      console.error('[ShopifyWebhook] ❌ Failed to process checkout update:', error.message);
+    }
+  }
+);
+
+/**
+ * Abandoned cart recovery cron endpoint
+ * Called by GitHub Actions or external cron service
+ */
+router.get('/cron/abandoned-carts', async (req, res) => {
+  // Verify cron secret
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.get('Authorization');
+  
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    console.warn('[ShopifyWebhook] Unauthorized cron request');
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('[ShopifyWebhook] 🔄 Running abandoned cart recovery...');
+  
+  try {
+    const result = await processAbandonedCarts();
+    res.json({
+      success: true,
+      message: `Processed abandoned carts: ${result.sent} emails sent, ${result.failed} failed`,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('[ShopifyWebhook] ❌ Cron failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default router;
 

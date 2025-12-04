@@ -12,6 +12,29 @@ jobs:
       contents: read
     steps:
       - name: Trigger Abandoned Cart Recovery
+        env:
+          RENDER_SERVICE_URL: ${{ secrets.RENDER_SERVICE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -X GET "https://your-domain.com/api/cron/abandoned-carts" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          # Use the Render service URL or default
+          SERVICE_URL="${RENDER_SERVICE_URL:-https://ghostsystems.onrender.com}"
+          
+          echo "Triggering abandoned cart recovery at $SERVICE_URL..."
+          
+          response=$(curl -s -w "\n%{http_code}" -X GET \
+            "$SERVICE_URL/webhook/shopify/cron/abandoned-carts" \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Content-Type: application/json")
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response: $body"
+          echo "HTTP Status: $http_code"
+          
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Abandoned cart recovery triggered successfully"
+          else
+            echo "❌ Failed to trigger recovery (HTTP $http_code)"
+            exit 1
+          fi
