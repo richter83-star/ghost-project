@@ -220,8 +220,8 @@ async function processQueue() {
     console.log(
       `[ShopifyPipeline] 🔄 More items added to queue (${processingQueue.length} remaining), continuing processing...`
     );
-    // Recursively process remaining items
-    processQueue();
+    // Recursively process remaining items (await to prevent race conditions)
+    await processQueue();
   } else {
     console.log('[ShopifyPipeline] ✅ Queue processing complete');
   }

@@ -3,7 +3,7 @@ services:
     name: ghostsystems
     env: node
     plan: free              # or starter / pro if you upgrade later
-    rootDir: ./GhostSystems # Points to the GhostSystems directory where package.json and application code are located
+    rootDir: ./             # render.yaml is inside GhostSystems, so ./ points to this directory
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true

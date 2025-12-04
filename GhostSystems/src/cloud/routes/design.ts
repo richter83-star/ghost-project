@@ -40,11 +40,9 @@ router.post('/run', async (req, res) => {
   const authHeader = req.headers.authorization;
   const cronSecret = process.env.CRON_SECRET;
   
+  // If CRON_SECRET is configured, require valid authorization
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    // Allow if no CRON_SECRET is set (for testing)
-    if (cronSecret) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
