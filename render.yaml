@@ -1,0 +1,135 @@
+services:
+  - type: web
+    name: ghostsystems
+    env: node
+    plan: free              # or starter / pro if you upgrade later
+    rootDir: ./GhostSystems  # Points to GhostSystems directory from repo root
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GHOST_MODE
+        value: learning
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GUMROAD_API_KEY
+        sync: false
+      - key: GUMROAD_WEBHOOK_SECRET
+        sync: false
+      - key: LEMONSQUEEZY_API_KEY
+        sync: false
+      - key: LEMONSQUEEZY_STORE_ID
+        sync: false
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_DB_PRODUCTS_ID
+        sync: false
+      # Shopify configuration (standardized)
+      - key: SHOPIFY_STORE_URL
+        value: dracanus-ai.myshopify.com
+        sync: false
+      - key: SHOPIFY_ADMIN_API_TOKEN
+        sync: false
+      - key: SHOPIFY_API_VERSION
+        value: 2025-01
+        sync: false
+      - key: SHOPIFY_WEBHOOK_SECRET
+        sync: false
+      # Firebase (required for listeners)
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      # Gemini AI (for content generation)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash-preview-09-2025
+        sync: false
+      # Email service (Resend - for digital goods delivery)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+      # Firestore collection name
+      - key: FIRESTORE_JOBS_COLLECTION
+        value: products
+        sync: false
+      # Shopify pipeline rate limiting (optional, defaults to 2000ms = 2 seconds between products)
+      - key: SHOPIFY_PIPELINE_DELAY_MS
+        value: 2000
+        sync: false
+      # Adaptive AI configuration (optional)
+      - key: ENABLE_ADAPTIVE_AI
+        value: 'true'
+        sync: false
+      - key: ADAPTIVE_AI_GENERATION_INTERVAL_HOURS
+        value: '24'
+        sync: false
+      - key: ADAPTIVE_AI_MIN_PRODUCTS
+        value: '3'
+        sync: false
+      - key: ADAPTIVE_AI_MAX_PRODUCTS
+        value: '5'
+        sync: false
+      # Curation level: strict (very selective), default (balanced), or relaxed (more products)
+      - key: ADAPTIVE_AI_CURATION_LEVEL
+        value: 'default'
+        sync: false
+      # AI Image Generation (uses Gemini Imagen)
+      - key: ENABLE_AI_IMAGES
+        value: 'true'
+        sync: false
+      # Abandoned Cart Recovery
+      - key: ENABLE_ABANDONED_CART
+        value: 'true'
+        sync: false
+      - key: ABANDONED_CART_DISCOUNT_CODE
+        value: 'COMEBACK10'
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      # Dynamic Pricing
+      - key: ENABLE_DYNAMIC_PRICING
+        value: 'true'
+        sync: false
+      - key: DYNAMIC_PRICING_INTERVAL_DAYS
+        value: '7'
+        sync: false
+      # Store Design Agent (AI-powered store optimization)
+      - key: ENABLE_STORE_DESIGN_AGENT
+        value: 'true'
+        sync: false
+      - key: DESIGN_AGENT_INTERVAL_HOURS
+        value: '24'
+        sync: false
+      - key: DESIGN_AGENT_AUTO_APPLY
+        value: 'false'
+        sync: false
+      - key: DESIGN_AGENT_MIN_CONFIDENCE
+        value: '0.7'
+        sync: false
+      - key: DESIGN_AGENT_MAX_DAILY_CHANGES
+        value: '5'
+        sync: false
+      - key: DESIGN_AGENT_NOTIFY_EMAIL
+        sync: false
+      - key: DESIGN_AGENT_RUN_ON_STARTUP
+        value: 'false'
+        sync: false
+      - key: APP_URL
+        value: 'https://ghostsystems.onrender.com'
+        sync: false
+
+  # Optional background cron-runner (comment out if not needed)
+  # All functionality is now in the main web service (ghostsystems)
+  # - type: worker
+  #   name: ghostsystems-cron
+  #   env: node
+  #   rootDir: ./
+  #   buildCommand: npm install
+  #   startCommand: npm start
+  #   autoDeploy: true
+
