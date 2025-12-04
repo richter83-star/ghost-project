@@ -3,11 +3,26 @@ import axios from 'axios';
 /**
  * Gemini AI Service
  * Handles content generation for products (descriptions and images)
+ * Supports Nano Banana (Imagen 4) for enhanced image generation
  */
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-09-2025';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.0-flash';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+// Image generation model - defaults to Gemini Flash (free) or Nano Banana if billing enabled
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+
+// Fallback image models in order of preference
+const IMAGE_MODEL_FALLBACKS = [
+  'gemini-2.0-flash-exp',                // Gemini Flash (free tier, native image gen)
+  'imagen-4.0-generate-001',             // Nano Banana (requires billing)
+  'imagen-4.0-fast-generate-001',        // Nano Banana Fast (requires billing)
+];
+
+// Cache for available models
+let cachedImageModels: string[] | null = null;
 
 const DESCRIPTION_PROMPT = `
   You are an expert e-commerce copywriter specializing in digital products.
@@ -108,7 +123,7 @@ function getImagePromptForProductType(title: string, productType: string): strin
 }
 
 /**
- * Generate product image using Gemini 2.0 Flash (experimental image generation)
+ * Generate product image using Gemini Flash or Nano Banana (Imagen 4)
  * @param title - Product title
  * @param productType - Product type for specialized prompts
  * @returns Promise<string> - Base64 encoded image data
@@ -118,60 +133,24 @@ export async function generateImage(title: string, productType: string = 'digita
     throw new Error('GEMINI_API_KEY environment variable is not set');
   }
 
-  // Use Gemini 2.0 Flash experimental for image generation
-  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
-  
   // Get product-type-specific prompt
   const imagePrompt = getImagePromptForProductType(title, productType);
   console.log(`[Gemini] Generating image with prompt: ${imagePrompt.substring(0, 100)}...`);
 
-  const payload = {
-    contents: [
-      {
-        parts: [
-          {
-            text: `Generate an image: ${imagePrompt}`
-          }
-        ]
-      }
-    ],
-    generationConfig: {
-      responseModalities: ['IMAGE', 'TEXT'],
-      responseMimeType: 'image/png'
-    }
-  };
+  const model = await getBestImageModel();
+  const isImagen = model.includes('imagen');
 
   try {
-    const response = await axios.post(imageApiUrl, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 90000, // 90 second timeout for image generation
-    });
-
-    // Try to extract image from response
-    const candidates = response.data?.candidates;
-    if (!candidates || candidates.length === 0) {
-      throw new Error('No candidates in response');
+    if (isImagen) {
+      console.log('[Gemini] Using Nano Banana (Imagen 4)...');
+      return await generateImageWithImagen(imagePrompt);
+    } else {
+      console.log('[Gemini] Using Gemini Flash image generation...');
+      return await generateImageWithGemini(imagePrompt);
     }
-
-    const parts = candidates[0]?.content?.parts;
-    if (!parts || parts.length === 0) {
-      throw new Error('No parts in response');
-    }
-
-    // Look for inline_data (base64 image)
-    for (const part of parts) {
-      if (part.inlineData?.data) {
-        console.log(`[Gemini] ✅ Image generated successfully (${Math.round(part.inlineData.data.length / 1024)}KB)`);
-        return part.inlineData.data;
-      }
-    }
-
-    // If no image found, log the response for debugging
-    console.error('[Gemini] Response structure:', JSON.stringify(response.data, null, 2).substring(0, 1000));
-    throw new Error('No image data found in response');
   } catch (error: any) {
     const errorDetails = error.response?.data || error.message;
-    console.error('[Gemini] Failed to generate image:', JSON.stringify(errorDetails).substring(0, 500));
+    console.error('[Gemini] Image generation failed:', JSON.stringify(errorDetails).substring(0, 500));
     throw new Error(`Failed to generate image: ${error.message}`);
   }
 }
@@ -214,5 +193,209 @@ export function validateConfig(): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * List all available models from Google AI
+ * @returns Promise<Array> - List of available models
+ */
+export async function listAvailableModels(): Promise<Array<{ name: string; displayName: string; supportedGenerationMethods: string[] }>> {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY environment variable is not set');
+  }
+
+  try {
+    const response = await axios.get(
+      `${GEMINI_BASE_URL}/models?key=${GEMINI_API_KEY}`,
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+
+    return response.data?.models || [];
+  } catch (error: any) {
+    console.error('[Gemini] Failed to list models:', error.message);
+    throw new Error(`Failed to list models: ${error.message}`);
+  }
+}
+
+/**
+ * Get available image generation models
+ * @returns Promise<string[]> - List of model names that support image generation
+ */
+export async function getAvailableImageModels(): Promise<string[]> {
+  if (cachedImageModels) {
+    return cachedImageModels;
+  }
+
+  try {
+    const models = await listAvailableModels();
+    
+    // Filter for image generation capable models
+    const imageModels = models
+      .filter(m => 
+        m.name.includes('imagen') || 
+        m.supportedGenerationMethods?.includes('generateImage') ||
+        m.name.includes('image')
+      )
+      .map(m => m.name.replace('models/', ''));
+    
+    cachedImageModels = imageModels;
+    console.log('[Gemini] Available image models:', imageModels);
+    return imageModels;
+  } catch (error: any) {
+    console.warn('[Gemini] Could not fetch available models, using defaults');
+    return IMAGE_MODEL_FALLBACKS;
+  }
+}
+
+/**
+ * Find the best available image model
+ * Prefers Nano Banana (Imagen 4) if available
+ */
+async function getBestImageModel(): Promise<string> {
+  // If user explicitly set a model, use it
+  if (process.env.GEMINI_IMAGE_MODEL) {
+    return process.env.GEMINI_IMAGE_MODEL;
+  }
+
+  try {
+    const available = await getAvailableImageModels();
+    
+    // Check our preferred models in order
+    for (const preferred of IMAGE_MODEL_FALLBACKS) {
+      if (available.some(m => m.includes(preferred) || preferred.includes(m))) {
+        console.log(`[Gemini] Selected image model: ${preferred}`);
+        return preferred;
+      }
+    }
+    
+    // If none of our preferred models found, use first available imagen model
+    const imagenModel = available.find(m => m.includes('imagen'));
+    if (imagenModel) {
+      console.log(`[Gemini] Using available imagen model: ${imagenModel}`);
+      return imagenModel;
+    }
+  } catch (error) {
+    console.warn('[Gemini] Model detection failed, using default');
+  }
+
+  return IMAGE_MODEL_FALLBACKS[IMAGE_MODEL_FALLBACKS.length - 1]; // Fallback to Gemini Flash
+}
+
+/**
+ * Generate image using Imagen API (Nano Banana / Imagen 4)
+ * @param prompt - Image generation prompt
+ * @returns Promise<string> - Base64 encoded image data
+ */
+async function generateImageWithImagen(prompt: string): Promise<string> {
+  const model = await getBestImageModel();
+  const apiUrl = `${GEMINI_BASE_URL}/models/${model}:predict?key=${GEMINI_API_KEY}`;
+
+  console.log(`[Gemini] Using Imagen model: ${model}`);
+
+  const payload = {
+    instances: [{ prompt }],
+    parameters: {
+      sampleCount: 1,
+      aspectRatio: '1:1',
+      outputOptions: {
+        mimeType: 'image/png'
+      }
+    }
+  };
+
+  const response = await axios.post(apiUrl, payload, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 120000, // 2 min timeout for high-quality generation
+  });
+
+  const predictions = response.data?.predictions;
+  if (!predictions || predictions.length === 0) {
+    throw new Error('No predictions in Imagen response');
+  }
+
+  const imageData = predictions[0]?.bytesBase64Encoded;
+  if (!imageData) {
+    throw new Error('No image data in Imagen response');
+  }
+
+  console.log(`[Gemini] ✅ Imagen generated image (${Math.round(imageData.length / 1024)}KB)`);
+  return imageData;
+}
+
+/**
+ * Generate image using Gemini multimodal
+ * @param prompt - Image generation prompt
+ * @returns Promise<string> - Base64 encoded image data
+ */
+async function generateImageWithGemini(prompt: string): Promise<string> {
+  const model = await getBestImageModel();
+  const apiUrl = `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+  console.log(`[Gemini] Using model: ${model}`);
+
+  const payload = {
+    contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
+    generationConfig: {
+      responseModalities: ['Text', 'Image'],  // Correct casing for Gemini API
+    }
+  };
+
+  const response = await axios.post(apiUrl, payload, {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 120000, // 2 min timeout for image generation
+  });
+
+  const parts = response.data?.candidates?.[0]?.content?.parts;
+  if (!parts) {
+    throw new Error('No parts in Gemini response');
+  }
+
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      console.log(`[Gemini] ✅ Generated image (${Math.round(part.inlineData.data.length / 1024)}KB)`);
+      return part.inlineData.data;
+    }
+  }
+
+  throw new Error('No image data in Gemini response');
+}
+
+/**
+ * Print available models summary (for debugging/setup)
+ */
+export async function printModelsSummary(): Promise<void> {
+  console.log('\n🔍 Scanning available Google AI models...\n');
+  
+  try {
+    const models = await listAvailableModels();
+    
+    console.log('📋 All Available Models:');
+    console.log('─'.repeat(60));
+    
+    const grouped: Record<string, typeof models> = {};
+    for (const model of models) {
+      const category = model.name.includes('imagen') ? 'Image Generation' :
+                       model.name.includes('gemini') ? 'Gemini' :
+                       model.name.includes('embedding') ? 'Embeddings' : 'Other';
+      if (!grouped[category]) grouped[category] = [];
+      grouped[category].push(model);
+    }
+    
+    for (const [category, categoryModels] of Object.entries(grouped)) {
+      console.log(`\n🏷️  ${category}:`);
+      for (const m of categoryModels) {
+        const name = m.name.replace('models/', '');
+        const methods = m.supportedGenerationMethods?.join(', ') || 'N/A';
+        console.log(`   • ${name}`);
+        console.log(`     Methods: ${methods}`);
+      }
+    }
+    
+    console.log('\n' + '─'.repeat(60));
+    console.log('💡 Set GEMINI_IMAGE_MODEL env var to use a specific model');
+    console.log('   Example: GEMINI_IMAGE_MODEL=imagen-4.0-generate-preview-05-20\n');
+  } catch (error: any) {
+    console.error('❌ Failed to fetch models:', error.message);
+  }
 }
 

@@ -46,7 +46,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash-preview-09-2025
+        value: gemini-3.0-flash
         sync: false
       # Email service (Resend - for digital goods delivery)
       - key: RESEND_API_KEY

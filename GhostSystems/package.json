@@ -17,6 +17,7 @@
         "fix:archived": "tsx src/cli/fix-archived-products.ts",
         "fix:shopify": "node run-fix.mjs",
         "verify:images": "tsx src/cli/verify-product-images.ts",
+    "regenerate:images": "tsx src/cli/regenerate-images.ts",
         "adaptive-ai:analyze": "tsx src/cli/adaptive-ai.ts analyze",
         "adaptive-ai:generate": "tsx src/cli/adaptive-ai.ts generate",
         "theme:dracanus": "tsx src/cli/apply-dracanus-theme.ts",
@@ -50,6 +51,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.3"
   },
   "engines": {

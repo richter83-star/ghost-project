@@ -43,7 +43,8 @@ export async function generateDescription(jobData) {
 }
 
 export async function generateImage(prompt) {
-  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${apiKey}`;
+  // Use Imagen 4 (Nano Banana) for image generation - requires billing, falls back gracefully
+  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
 
   const payload = {
     instances: [

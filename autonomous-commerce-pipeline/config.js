@@ -24,7 +24,7 @@ export const config = {
     // API key is left as an empty string.
     // The runtime environment will provide it.
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: 'gemini-2.5-flash-preview-09-2025',
+    model: process.env.GEMINI_MODEL || 'gemini-3.0-flash',
     // System prompt to guide the LLM
     descriptionPrompt: `
       You are an expert e-commerce copywriter.
