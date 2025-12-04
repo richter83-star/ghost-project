@@ -108,7 +108,7 @@ function getImagePromptForProductType(title: string, productType: string): strin
 }
 
 /**
- * Generate product image using Imagen (via Gemini API)
+ * Generate product image using Gemini 2.0 Flash (experimental image generation)
  * @param title - Product title
  * @param productType - Product type for specialized prompts
  * @returns Promise<string> - Base64 encoded image data
@@ -118,49 +118,60 @@ export async function generateImage(title: string, productType: string = 'digita
     throw new Error('GEMINI_API_KEY environment variable is not set');
   }
 
-  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${GEMINI_API_KEY}`;
+  // Use Gemini 2.0 Flash experimental for image generation
+  const imageApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
   
   // Get product-type-specific prompt
   const imagePrompt = getImagePromptForProductType(title, productType);
   console.log(`[Gemini] Generating image with prompt: ${imagePrompt.substring(0, 100)}...`);
 
   const payload = {
-    instances: [
+    contents: [
       {
-        prompt: imagePrompt,
-      },
+        parts: [
+          {
+            text: `Generate an image: ${imagePrompt}`
+          }
+        ]
+      }
     ],
-    parameters: {
-      sampleCount: 1,
-      aspectRatio: '1:1', // Square images for product listings
-      safetyFilterLevel: 'block_some',
-    },
+    generationConfig: {
+      responseModalities: ['IMAGE', 'TEXT'],
+      responseMimeType: 'image/png'
+    }
   };
 
   try {
     const response = await axios.post(imageApiUrl, payload, {
       headers: { 'Content-Type': 'application/json' },
-      timeout: 60000, // 60 second timeout for image generation
+      timeout: 90000, // 90 second timeout for image generation
     });
 
-    const base64ImageData =
-      response.data?.predictions?.[0]?.bytesBase64Encoded;
-
-    if (!base64ImageData) {
-      console.error(
-        '[Gemini] Imagen API Response:',
-        JSON.stringify(response.data, null, 2)
-      );
-      throw new Error(
-        'Imagen API returned an invalid response structure.'
-      );
+    // Try to extract image from response
+    const candidates = response.data?.candidates;
+    if (!candidates || candidates.length === 0) {
+      throw new Error('No candidates in response');
     }
 
-    console.log(`[Gemini] ✅ Image generated successfully (${Math.round(base64ImageData.length / 1024)}KB)`);
-    return base64ImageData;
+    const parts = candidates[0]?.content?.parts;
+    if (!parts || parts.length === 0) {
+      throw new Error('No parts in response');
+    }
+
+    // Look for inline_data (base64 image)
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        console.log(`[Gemini] ✅ Image generated successfully (${Math.round(part.inlineData.data.length / 1024)}KB)`);
+        return part.inlineData.data;
+      }
+    }
+
+    // If no image found, log the response for debugging
+    console.error('[Gemini] Response structure:', JSON.stringify(response.data, null, 2).substring(0, 1000));
+    throw new Error('No image data found in response');
   } catch (error: any) {
     const errorDetails = error.response?.data || error.message;
-    console.error('[Gemini] Failed to generate image:', errorDetails);
+    console.error('[Gemini] Failed to generate image:', JSON.stringify(errorDetails).substring(0, 500));
     throw new Error(`Failed to generate image: ${error.message}`);
   }
 }
