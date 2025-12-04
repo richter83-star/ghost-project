@@ -445,42 +445,83 @@ header, .header, .site-header, .header-wrapper, #shopify-section-header, .sectio
   text-shadow: 0 2px 20px rgba(0,0,0,0.8) !important;
 }
 
-/* ─── PRODUCT CARDS - DARK METALLIC ─── */
+/* ─── PRODUCT CARDS - DARK METALLIC MOCKUP STYLE ─── */
 .product-card, .card, .product-item, .grid__item .card, .card-wrapper, .product-card-wrapper {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-dark) !important;
-  border-radius: 8px !important;
+  background: linear-gradient(145deg, #18181a 0%, #141416 50%, #101012 100%) !important;
+  border: 1px solid #2a2a2e !important;
+  border-radius: 12px !important;
   overflow: hidden !important;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03) !important;
+  position: relative !important;
+}
+
+/* Subtle inner glow effect */
+.product-card::before, .card::before {
+  content: '' !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  border-radius: 12px !important;
+  padding: 1px !important;
+  background: linear-gradient(145deg, rgba(60,60,65,0.3), transparent, rgba(60,60,65,0.1)) !important;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0) !important;
+  -webkit-mask-composite: xor !important;
+  mask-composite: exclude !important;
+  pointer-events: none !important;
 }
 
 .product-card:hover, .card:hover, .card-wrapper:hover {
-  transform: translateY(-5px) scale(1.02) !important;
-  border-color: var(--border-metallic) !important;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 20px rgba(100,100,110,0.1) !important;
+  transform: translateY(-8px) !important;
+  border-color: #3d3d42 !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 30px rgba(80,80,90,0.1) !important;
 }
 
 .card__inner, .card__content, .card-information {
-  background: var(--bg-card) !important;
-  padding: 16px !important;
+  background: transparent !important;
+  padding: 20px !important;
+  text-align: center !important;
 }
 
 .card__heading, .product-card__title, .card__heading a, h3.card__heading a {
-  color: var(--text-primary) !important;
+  color: #e8e8e8 !important;
   font-weight: 600 !important;
-  font-size: 16px !important;
+  font-size: 18px !important;
   text-decoration: none !important;
+  letter-spacing: 0.5px !important;
+  margin-bottom: 8px !important;
+  display: block !important;
 }
 
 .card__information, .product-card__info {
-  background: var(--bg-card) !important;
+  background: transparent !important;
 }
 
-/* Product Images */
-.card__media, .product-card__image, .media {
-  background: var(--bg-surface) !important;
-  border-bottom: 1px solid var(--border-dark) !important;
+/* Product description text */
+.card__heading + *, .price + *, .card-information__text {
+  color: #8a8a8f !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* Product Images - centered with padding */
+.card__media, .product-card__image, .media, .card__media-item {
+  background: transparent !important;
+  border-bottom: none !important;
+  padding: 30px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.card__media img, .product-card__image img, .media img {
+  max-width: 70% !important;
+  max-height: 200px !important;
+  object-fit: contain !important;
+  filter: brightness(0.95) contrast(1.05) !important;
 }
 
 /* ─── PRICES ─── */
@@ -490,32 +531,40 @@ header, .header, .site-header, .header-wrapper, #shopify-section-header, .sectio
   font-size: 18px !important;
 }
 
-/* ─── BUTTONS - DARK METALLIC ─── */
+/* ─── BUTTONS - DARK METALLIC MOCKUP STYLE ─── */
 .btn, button, .button, .shopify-payment-button__button, input[type="submit"], .product-form__submit {
-  background: linear-gradient(135deg, #2a2a2e 0%, #3a3a3f 50%, #2a2a2e 100%) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-metallic) !important;
-  border-radius: 4px !important;
+  background: linear-gradient(145deg, #1e1e20 0%, #2a2a2e 50%, #1e1e20 100%) !important;
+  color: #e8e8e8 !important;
+  border: 1px solid #3a3a3f !important;
+  border-radius: 6px !important;
   font-weight: 600 !important;
-  font-size: 14px !important;
-  letter-spacing: 1px !important;
+  font-size: 13px !important;
+  letter-spacing: 1.5px !important;
   text-transform: uppercase !important;
-  padding: 12px 24px !important;
+  padding: 14px 28px !important;
   transition: all 0.3s ease !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+  position: relative !important;
+  overflow: hidden !important;
 }
 
+/* Button hover glow */
 .btn:hover, button:hover, .button:hover {
-  background: linear-gradient(135deg, #3a3a3f 0%, #4a4a4f 50%, #3a3a3f 100%) !important;
-  border-color: var(--accent-silver) !important;
+  background: linear-gradient(145deg, #2a2a2e 0%, #3a3a3f 50%, #2a2a2e 100%) !important;
+  border-color: #4a4a4f !important;
   transform: translateY(-2px) !important;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08) !important;
 }
 
-/* Primary buttons */
-.btn--primary, .shopify-payment-button__button--unbranded {
-  background: linear-gradient(135deg, #4a4a4f 0%, #5a5a5f 50%, #4a4a4f 100%) !important;
-  border: none !important;
+/* Buy Now / Primary buttons */
+.btn--primary, .shopify-payment-button__button--unbranded, .quick-add__submit {
+  background: linear-gradient(145deg, #2d2d30 0%, #3d3d42 50%, #2d2d30 100%) !important;
+  border: 1px solid #4a4a4f !important;
+}
+
+.btn--primary:hover, .quick-add__submit:hover {
+  background: linear-gradient(145deg, #3d3d42 0%, #4d4d52 50%, #3d3d42 100%) !important;
+  border-color: #5a5a5f !important;
 }
 
 /* ─── SECTION HEADINGS ─── */
@@ -613,15 +662,38 @@ a:hover {
   letter-spacing: 1px !important;
 }
 
-/* ─── COLLECTION PAGE ─── */
-.collection, .collection-hero {
+/* ─── COLLECTION PAGE - ALL PRODUCTS STYLE ─── */
+.collection, .collection-hero, .collection-header {
   background: transparent !important;
+  text-align: center !important;
+  padding: 60px 0 40px !important;
 }
 
-.collection-hero__title {
-  font-size: 42px !important;
+.collection-hero__title, .collection__title, h1.collection__title {
+  font-size: 48px !important;
+  font-weight: 800 !important;
   text-transform: uppercase !important;
-  letter-spacing: 4px !important;
+  letter-spacing: 8px !important;
+  color: #e8e8e8 !important;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.5) !important;
+  margin-bottom: 40px !important;
+}
+
+/* Product grid - 2 column on desktop */
+.collection-product-list, .product-grid, .grid--2-col-tablet-down {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 30px !important;
+  max-width: 1000px !important;
+  margin: 0 auto !important;
+  padding: 20px !important;
+}
+
+@media (max-width: 768px) {
+  .collection-product-list, .product-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
 }
 
 /* ─── CART ─── */
