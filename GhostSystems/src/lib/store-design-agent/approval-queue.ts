@@ -99,17 +99,20 @@ export async function getPendingRecommendations(): Promise<DesignRecommendation[
   if (!initFirebase() || !db) return [];
 
   try {
+    // Simple query without orderBy to avoid requiring a composite index
     const snapshot = await db
       .collection(RECOMMENDATIONS_COLLECTION)
       .where('status', '==', 'pending')
-      .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map((doc) => ({
+    const recommendations = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
     })) as DesignRecommendation[];
+
+    // Sort in memory by createdAt descending
+    return recommendations.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   } catch (error: any) {
     console.error('[DesignAgent] Failed to get pending recommendations:', error.message);
     return [];
