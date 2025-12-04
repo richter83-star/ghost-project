@@ -680,14 +680,14 @@ a:hover {
 }
 
 /**
- * Fix product images
+ * Fix product images - replaces placeholders with real images
  * POST /api/design/fix-images
  */
 router.post('/fix-images', async (req, res) => {
   try {
     console.log('[DesignAgent] 🖼️ Fixing product images...');
     
-    const { fetchProducts, updateThemeAsset } = await import('../../lib/shopify.js');
+    const { fetchProducts } = await import('../../lib/shopify.js');
     const axios = (await import('axios')).default;
     
     const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
@@ -700,6 +700,24 @@ router.post('/fix-images', async (req, res) => {
       'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
     });
     
+    // Check if image is a placeholder (Shopify placeholder or missing)
+    const isPlaceholder = (images: any[]) => {
+      if (!images || images.length === 0) return true;
+      // Check if image is a Shopify placeholder SVG
+      const src = images[0]?.src || '';
+      if (src.includes('placeholder') || src.includes('no-image') || src.includes('gift-card')) return true;
+      return false;
+    };
+    
+    // Dark tech image categories for different product types
+    const getImageForProduct = (title: string, productType: string) => {
+      const titleLower = (title + ' ' + productType).toLowerCase();
+      const seed = Math.abs(title.split('').reduce((a, b) => a + b.charCodeAt(0), 0));
+      
+      // Use grayscale images for dark theme consistency
+      return `https://picsum.photos/seed/${seed}/800/800?grayscale`;
+    };
+    
     // Fetch all products
     const products = await fetchProducts(100);
     console.log(`[DesignAgent] Found ${products.length} products`);
@@ -707,22 +725,38 @@ router.post('/fix-images', async (req, res) => {
     let fixed = 0;
     let skipped = 0;
     let failed = 0;
+    const forceReplace = req.query.force === 'true';
     
     for (const product of products) {
-      // Check if product has images
-      if (product.images && product.images.length > 0) {
+      // Check if product needs image update
+      const needsImage = isPlaceholder(product.images) || forceReplace;
+      
+      if (!needsImage) {
         skipped++;
         continue;
       }
       
-      console.log(`[DesignAgent] Adding image to: ${product.title}`);
+      console.log(`[DesignAgent] Updating image for: ${product.title}`);
       
       try {
-        // Generate a dark tech-style placeholder based on product type
-        const seed = Math.abs(product.title.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0));
-        const imageUrl = `https://picsum.photos/seed/${seed}/800/800?grayscale`;
+        const imageUrl = getImageForProduct(product.title, product.product_type || '');
         
-        // Add image to product
+        // Delete existing placeholder images first
+        if (product.images && product.images.length > 0) {
+          for (const img of product.images) {
+            try {
+              await axios.delete(
+                `${BASE_URL}/products/${product.id}/images/${img.id}.json`,
+                { headers: getHeaders() }
+              );
+            } catch (e) {
+              // Ignore delete errors
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        
+        // Add new image
         await axios.post(
           `${BASE_URL}/products/${product.id}/images.json`,
           {
@@ -735,7 +769,7 @@ router.post('/fix-images', async (req, res) => {
         );
         
         fixed++;
-        console.log(`[DesignAgent] ✅ Added image to: ${product.title}`);
+        console.log(`[DesignAgent] ✅ Fixed image for: ${product.title}`);
         
         // Rate limiting
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -753,6 +787,7 @@ router.post('/fix-images', async (req, res) => {
       skipped,
       failed,
       total: products.length,
+      message: forceReplace ? 'Replaced all images' : 'Fixed placeholder images',
     });
   } catch (error: any) {
     console.error('[DesignAgent] Image fix failed:', error.message);
