@@ -7,8 +7,19 @@
 import { Resend } from 'resend';
 import { DesignRecommendation } from './types.js';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@dracanus-ai.com';
+// Lazy initialization to avoid crash if API key is missing
+let resend: Resend | null = null;
+function getResendClient(): Resend | null {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+}
+
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@dracanus-ai.com';
 const NOTIFY_EMAIL = process.env.DESIGN_AGENT_NOTIFY_EMAIL || '';
 const APP_URL = process.env.APP_URL || 'https://ghostsystems.onrender.com';
 
@@ -36,7 +47,8 @@ export async function sendRecommendationEmail(
     return false;
   }
 
-  if (!process.env.RESEND_API_KEY) {
+  const client = getResendClient();
+  if (!client) {
     console.warn('[DesignAgent] RESEND_API_KEY not set, skipping email');
     return false;
   }
@@ -63,7 +75,7 @@ export async function sendRecommendationEmail(
   });
 
   try {
-    await resend.emails.send({
+    await client.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
       subject: `🎨 ${recommendations.length} New Store Design Recommendations`,
@@ -196,10 +208,11 @@ function buildEmailHtml(
 export async function sendAppliedNotification(
   recommendation: DesignRecommendation
 ): Promise<boolean> {
-  if (!NOTIFY_EMAIL || !process.env.RESEND_API_KEY) return false;
+  const client = getResendClient();
+  if (!NOTIFY_EMAIL || !client) return false;
 
   try {
-    await resend.emails.send({
+    await client.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
       subject: `✅ Design Change Applied: ${recommendation.title}`,
@@ -231,10 +244,11 @@ export async function sendPerformanceReport(report: {
   avgImprovement: number;
   topPerformer: { title: string; improvement: number } | null;
 }): Promise<boolean> {
-  if (!NOTIFY_EMAIL || !process.env.RESEND_API_KEY) return false;
+  const client = getResendClient();
+  if (!NOTIFY_EMAIL || !client) return false;
 
   try {
-    await resend.emails.send({
+    await client.emails.send({
       from: FROM_EMAIL,
       to: NOTIFY_EMAIL,
       subject: `📊 Weekly Store Design Report`,
