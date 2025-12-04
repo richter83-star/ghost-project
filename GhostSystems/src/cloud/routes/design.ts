@@ -812,8 +812,8 @@ router.post('/fix-images', async (req, res) => {
         const base64Image = Buffer.from(imageResponse.data, 'binary').toString('base64');
         console.log(`[DesignAgent] Image fetched, size: ${Math.round(base64Image.length / 1024)}KB`);
         
-        // Update product with new image
-        await updateProduct(product.id, {
+        // Update product with new image (convert ID to string)
+        await updateProduct(String(product.id), {
           images: [{ attachment: base64Image }],
         });
         
