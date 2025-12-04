@@ -680,6 +680,87 @@ a:hover {
 }
 
 /**
+ * Fix product images
+ * POST /api/design/fix-images
+ */
+router.post('/fix-images', async (req, res) => {
+  try {
+    console.log('[DesignAgent] 🖼️ Fixing product images...');
+    
+    const { fetchProducts, updateThemeAsset } = await import('../../lib/shopify.js');
+    const axios = (await import('axios')).default;
+    
+    const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
+    const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
+    const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-01';
+    const BASE_URL = `https://${SHOPIFY_STORE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '')}/admin/api/${SHOPIFY_API_VERSION}`;
+    
+    const getHeaders = () => ({
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+    });
+    
+    // Fetch all products
+    const products = await fetchProducts(100);
+    console.log(`[DesignAgent] Found ${products.length} products`);
+    
+    let fixed = 0;
+    let skipped = 0;
+    let failed = 0;
+    
+    for (const product of products) {
+      // Check if product has images
+      if (product.images && product.images.length > 0) {
+        skipped++;
+        continue;
+      }
+      
+      console.log(`[DesignAgent] Adding image to: ${product.title}`);
+      
+      try {
+        // Generate a dark tech-style placeholder based on product type
+        const seed = Math.abs(product.title.split('').reduce((a: number, b: string) => a + b.charCodeAt(0), 0));
+        const imageUrl = `https://picsum.photos/seed/${seed}/800/800?grayscale`;
+        
+        // Add image to product
+        await axios.post(
+          `${BASE_URL}/products/${product.id}/images.json`,
+          {
+            image: {
+              src: imageUrl,
+              alt: product.title,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        
+        fixed++;
+        console.log(`[DesignAgent] ✅ Added image to: ${product.title}`);
+        
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error: any) {
+        failed++;
+        console.error(`[DesignAgent] ❌ Failed for ${product.title}:`, error.message);
+      }
+    }
+    
+    console.log(`[DesignAgent] ✅ Image fix complete: ${fixed} fixed, ${skipped} skipped, ${failed} failed`);
+    
+    res.json({
+      success: true,
+      fixed,
+      skipped,
+      failed,
+      total: products.length,
+    });
+  } catch (error: any) {
+    console.error('[DesignAgent] Image fix failed:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Helper to escape HTML
  */
 function escapeHtml(text: string): string {
