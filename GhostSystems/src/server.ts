@@ -18,6 +18,14 @@ async function main() {
   console.log('=================================');
 
   // ---------------------------------------------------------
+  // 0. Debug: Log ALL incoming requests
+  // ---------------------------------------------------------
+  app.use((req, res, next) => {
+    console.log(`[HTTP] ${req.method} ${req.path} from ${req.ip}`);
+    next();
+  });
+
+  // ---------------------------------------------------------
   // 1. Start Web Server
   // This is what Render is checking. 
   // The log [FleetController] live on port 10000 comes from here.
@@ -62,6 +70,12 @@ async function main() {
   // 2b. Design Agent API Routes
   // ---------------------------------------------------------
   app.use('/api/design', designRoutes);
+
+  // Catch-all 404 handler for debugging
+  app.use('*', (req, res) => {
+    console.log(`[404] No route matched: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ error: 'Route not found', path: req.originalUrl, available: ['/', '/api/design/*', '/webhook/shopify/*'] });
+  });
 
   app.listen(PORT, () => {
     // This is the log line you are seeing
