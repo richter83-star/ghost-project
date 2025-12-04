@@ -15,7 +15,7 @@ const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || '';
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-01';
 const BASE_URL = `https://${SHOPIFY_STORE_URL}/admin/api/${SHOPIFY_API_VERSION}`;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent`;
 
 function getHeaders() {
   return {
@@ -61,22 +61,32 @@ async function fetchProducts() {
 // ============================================================================
 
 async function generateWithGemini(systemPrompt, userPrompt) {
-  const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: userPrompt }] }],
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-    }),
-  });
+  try {
+    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: userPrompt }] }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+      }),
+    });
 
-  const data = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(data.error?.message || 'Gemini API error');
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.error('   Gemini API error:', data.error?.message || JSON.stringify(data).slice(0, 200));
+      throw new Error(data.error?.message || 'Gemini API error');
+    }
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) {
+      throw new Error('Empty response from Gemini');
+    }
+    return text;
+  } catch (error) {
+    console.error('   Gemini request failed:', error.message);
+    throw error;
   }
-
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function generatePromptPack(title, theme) {
