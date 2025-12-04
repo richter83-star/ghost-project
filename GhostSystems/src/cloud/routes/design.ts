@@ -275,26 +275,58 @@ router.post('/apply-theme', async (req, res) => {
       return res.status(500).json({ error: 'Could not find active theme' });
     }
     
-    console.log(`[DesignAgent] Found theme: ${theme.name}`);
+    console.log(`[DesignAgent] Found theme: ${theme.name} (ID: ${theme.id})`);
     
     // Dracanus AI CSS Theme
     const DRACANUS_CSS = getDracanusCSS();
     
-    // Get existing CSS
-    const existingCSS = await getThemeAsset(theme.id, 'assets/custom.css');
-    const finalCSS = existingCSS?.value 
-      ? existingCSS.value + '\n\n' + DRACANUS_CSS
-      : DRACANUS_CSS;
+    // Upload custom CSS file
+    console.log('[DesignAgent] Uploading custom.css...');
+    await updateThemeAsset(theme.id, 'assets/custom.css', DRACANUS_CSS);
     
-    // Apply theme
-    await updateThemeAsset(theme.id, 'assets/custom.css', finalCSS);
+    // Now ensure theme.liquid includes the custom.css
+    console.log('[DesignAgent] Checking theme.liquid for CSS include...');
+    const themeLiquid = await getThemeAsset(theme.id, 'layout/theme.liquid');
+    
+    if (!themeLiquid?.value) {
+      return res.status(500).json({ error: 'Could not read theme.liquid' });
+    }
+    
+    const cssIncludeTag = `{{ 'custom.css' | asset_url | stylesheet_tag }}`;
+    
+    // Check if already included
+    if (!themeLiquid.value.includes('custom.css')) {
+      console.log('[DesignAgent] Adding custom.css to theme.liquid...');
+      
+      // Find </head> and insert before it
+      let updatedLiquid = themeLiquid.value;
+      
+      if (updatedLiquid.includes('</head>')) {
+        updatedLiquid = updatedLiquid.replace(
+          '</head>',
+          `  ${cssIncludeTag}\n  </head>`
+        );
+      } else if (updatedLiquid.includes('{% endcontent_for_header %}')) {
+        // Alternative: add after content_for_header
+        updatedLiquid = updatedLiquid.replace(
+          '{% endcontent_for_header %}',
+          `{% endcontent_for_header %}\n  ${cssIncludeTag}`
+        );
+      }
+      
+      await updateThemeAsset(theme.id, 'layout/theme.liquid', updatedLiquid);
+      console.log('[DesignAgent] ✅ Added custom.css to theme.liquid');
+    } else {
+      console.log('[DesignAgent] custom.css already included in theme.liquid');
+    }
     
     console.log('[DesignAgent] ✅ Dracanus AI theme applied!');
     
     res.json({ 
       success: true, 
       message: 'Dracanus AI theme applied successfully',
-      theme: theme.name 
+      theme: theme.name,
+      cssIncluded: true
     });
   } catch (error: any) {
     console.error('[DesignAgent] Theme application failed:', error.message);
