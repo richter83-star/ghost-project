@@ -4,6 +4,8 @@ import { validateJobData, isDescriptionMissing } from '../lib/validation.js';
 import { generateDescription, generateProductImage } from '../lib/gemini.js';
 import { createProduct, validateConfig as validateShopifyConfig } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
+import { verifyAndFix, updateProductWithContent, GeneratedContent } from '../lib/product-verifier.js';
+import { generateProductContent } from '../lib/content-generator.js';
 
 let db: FirebaseFirestore.Firestore | null = null;
 
@@ -97,6 +99,45 @@ async function processDraftProduct(docSnap: FirebaseFirestore.QueryDocumentSnaps
       }
     }
 
+    // Verify and generate product content if missing
+    let productContent: any = data.content;
+    let hasContent = data.hasContent || false;
+    
+    if (!hasContent) {
+      console.log(`[ShopifyPipeline] Verifying/generating content for product ${productId}...`);
+      try {
+        const { result, fixed, content } = await verifyAndFix({
+          id: productId,
+          title: validatedData.title,
+          description,
+          productType: validatedData.productType,
+          price: validatedData.price,
+          imageUrl: validatedData.imageUrl,
+          hasContent: false,
+        });
+
+        if (fixed && content) {
+          productContent = content.content;
+          hasContent = true;
+          console.log(`[ShopifyPipeline] ✅ Generated ${content.type} content for product`);
+          
+          // Update description from content if better
+          if (content.markdown && content.markdown.length > description.length) {
+            const contentDescription = extractDescriptionFromContent(content);
+            if (contentDescription.length > description.length) {
+              description = contentDescription;
+              console.log(`[ShopifyPipeline] ✅ Updated description from generated content`);
+            }
+          }
+        } else if (!result.isValid) {
+          console.warn(`[ShopifyPipeline] ⚠️ Product verification issues: ${result.issues.join(', ')}`);
+        }
+      } catch (error: any) {
+        console.error(`[ShopifyPipeline] ⚠️ Content generation failed: ${error.message}`);
+        // Continue without content - product will still be created
+      }
+    }
+
     // Generate image if missing - try AI first, fallback to placeholder
     let imageUrl = validatedData.imageUrl;
     let imageBase64: string | undefined = undefined;
@@ -148,8 +189,10 @@ async function processDraftProduct(docSnap: FirebaseFirestore.QueryDocumentSnaps
       publishedAt: FieldValue.serverTimestamp(),
       description, // Save generated description
       imageSource, // Track how image was generated
+      hasContent, // Track if content was generated
       ...(imageUrl && { imageUrl }),
       ...(imageBase64 && { hasAiImage: true }),
+      ...(productContent && { content: productContent }),
     });
 
     console.log(
@@ -289,5 +332,29 @@ export function startShopifyPipeline() {
   );
 
   console.log('[ShopifyPipeline] 👻 Pipeline listener is active.');
+}
+
+/**
+ * Extract a description from generated content
+ */
+function extractDescriptionFromContent(content: any): string {
+  if (!content) return '';
+  
+  const c = content.content;
+  if (!c) return '';
+  
+  if (content.type === 'prompt_pack' && c.usageGuide) {
+    return `${c.title} - A premium collection of ${c.totalPrompts || 15} professionally crafted AI prompts. ${c.usageGuide.slice(0, 300)}`;
+  }
+  
+  if (content.type === 'automation_kit' && c.description) {
+    return `${c.title} - ${c.description}. Includes complete setup guide and workflow for ${c.platform || 'automation'}.`;
+  }
+  
+  if (content.type === 'bundle' && c.description) {
+    return `${c.title} - ${c.description}. ${c.totalValue || 'Premium bundle'} with ${c.items?.length || 0} items.`;
+  }
+  
+  return '';
 }
 

@@ -18,6 +18,7 @@
         "fix:shopify": "node run-fix.mjs",
         "verify:images": "tsx src/cli/verify-product-images.ts",
     "regenerate:images": "tsx src/cli/regenerate-images.ts",
+    "verify:products": "tsx src/cli/verify-products.ts",
         "adaptive-ai:analyze": "tsx src/cli/adaptive-ai.ts analyze",
         "adaptive-ai:generate": "tsx src/cli/adaptive-ai.ts generate",
         "theme:dracanus": "tsx src/cli/apply-dracanus-theme.ts",
