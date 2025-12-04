@@ -73,12 +73,13 @@ export async function saveRecommendations(
   const batch = db.batch();
 
   for (const rec of recommendations) {
-    const docRef = db.collection(RECOMMENDATIONS_COLLECTION).doc();
+    // Use the recommendation's UUID as the document ID so email links work
+    const docRef = db.collection(RECOMMENDATIONS_COLLECTION).doc(rec.id);
     batch.set(docRef, {
       ...rec,
       createdAt: FieldValue.serverTimestamp(),
     });
-    ids.push(docRef.id);
+    ids.push(rec.id);
   }
 
   try {
