@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 /**
- * Apply DRACANUS AI Brand Theme
- * Applies dark, metallic, tech-forward design to match logo.
- * 
- * Run: node apply-dracanus-theme.mjs
+ * Apply DRACANUS AI Theme (Plain JS version)
+ * Applies dark, metallic, tech-forward theme to Shopify store.
  */
 
 import 'dotenv/config';
@@ -20,42 +18,137 @@ function getHeaders() {
   };
 }
 
-// ============================================================================
-// DRACANUS BRAND COLORS & STYLE
-// ============================================================================
+// DRACANUS AI CSS Theme
+const DRACANUS_CSS = `/* ═══════════════════════════════════════════════════════════════
+   DRACANUS AI - PREMIUM DARK THEME v2.0
+   ═══════════════════════════════════════════════════════════════ */
 
-const DRACANUS_THEME = {
-  // Primary colors from logo
-  colors: {
-    primary: '#1a1a1a',        // Dark charcoal (background)
-    secondary: '#2d2d2d',       // Medium gray (text)
-    accent: '#ffffff',         // Metallic white highlights
-    metallic: '#4a4a4a',       // Metallic gray (borders/accents)
-    dark: '#0a0a0a',           // Pure black (shadows)
-    text: '#e0e0e0',           // Light gray text
-    textMuted: '#999999',       // Muted text
-  },
-  
-  // Typography - modern, bold, angular
-  fonts: {
-    heading: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    body: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    mono: '"SF Mono", "Monaco", "Courier New", monospace',
-  },
-  
-  // Design tokens
-  style: {
-    borderRadius: '4px',       // Sharp, minimal rounding
-    shadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-    shadowStrong: '0 8px 24px rgba(0, 0, 0, 0.5)',
-    border: '1px solid #333333',
-    transition: 'all 0.2s ease',
-  },
-};
+:root {
+  --bg-darkest: #0d0d0d;
+  --bg-dark: #131315;
+  --bg-surface: #1a1a1c;
+  --bg-card: #141416;
+  --border-dark: #2a2a2e;
+  --border-metallic: #3d3d42;
+  --text-primary: #e8e8e8;
+  --text-secondary: #8a8a8f;
+  --text-muted: #5a5a5f;
+  --accent-silver: #b8b8bc;
+  --accent-metallic: linear-gradient(135deg, #4a4a4f 0%, #6a6a70 50%, #4a4a4f 100%);
+}
 
-// ============================================================================
-// SHOPIFY THEME CUSTOMIZATION
-// ============================================================================
+html, body {
+  background: var(--bg-darkest) !important;
+  background-image: 
+    radial-gradient(ellipse at 50% 0%, rgba(40,40,45,0.3) 0%, transparent 50%),
+    linear-gradient(180deg, #0d0d0d 0%, #101012 50%, #0d0d0d 100%) !important;
+  color: var(--text-primary) !important;
+  font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif !important;
+  min-height: 100vh;
+}
+
+header, .header, .site-header {
+  background: rgba(13,13,13,0.95) !important;
+  backdrop-filter: blur(10px) !important;
+  border-bottom: 1px solid var(--border-dark) !important;
+  box-shadow: 0 4px 30px rgba(0,0,0,0.5) !important;
+}
+
+.header__menu-item, nav a, .site-nav a {
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+  font-size: 14px !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  transition: all 0.3s ease !important;
+}
+
+.header__menu-item:hover, nav a:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255,255,255,0.05) !important;
+}
+
+.product-card, .card, .product-item {
+  background: linear-gradient(145deg, #18181a 0%, #141416 50%, #101012 100%) !important;
+  border: 1px solid #2a2a2e !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03) !important;
+}
+
+.product-card:hover, .card:hover {
+  transform: translateY(-8px) !important;
+  border-color: #3d3d42 !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6), 0 0 30px rgba(80,80,90,0.1) !important;
+}
+
+.card__heading, .product-card__title {
+  color: #e8e8e8 !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+}
+
+.price, .product-price {
+  color: var(--accent-silver) !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+}
+
+.btn, button, .button {
+  background: linear-gradient(145deg, #1e1e20 0%, #2a2a2e 50%, #1e1e20 100%) !important;
+  color: #e8e8e8 !important;
+  border: 1px solid #3a3a3f !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  letter-spacing: 1.5px !important;
+  text-transform: uppercase !important;
+  padding: 14px 28px !important;
+  transition: all 0.3s ease !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+}
+
+.btn:hover, button:hover {
+  background: linear-gradient(145deg, #2a2a2e 0%, #3a3a3f 50%, #2a2a2e 100%) !important;
+  border-color: #4a4a4f !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5) !important;
+}
+
+.btn--primary, .shopify-payment-button__button {
+  background: linear-gradient(145deg, #2d2d30 0%, #3d3d42 50%, #2d2d30 100%) !important;
+  border: 1px solid #4a4a4f !important;
+}
+
+footer, .footer {
+  background: var(--bg-dark) !important;
+  border-top: 1px solid var(--border-dark) !important;
+  color: var(--text-secondary) !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+}
+
+input, textarea, select {
+  background: var(--bg-surface) !important;
+  border: 1px solid var(--border-dark) !important;
+  color: var(--text-primary) !important;
+  border-radius: 4px !important;
+  padding: 12px 16px !important;
+}
+
+input:focus, textarea:focus {
+  border-color: var(--border-metallic) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(100,100,110,0.2) !important;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-darkest); }
+::-webkit-scrollbar-thumb { background: var(--border-metallic); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-silver); }`;
 
 async function getCurrentTheme() {
   const response = await fetch(`${BASE_URL}/themes.json`, { headers: getHeaders() });
@@ -63,237 +156,26 @@ async function getCurrentTheme() {
   return data.themes?.find(t => t.role === 'main') || data.themes?.[0];
 }
 
-async function getThemeAssets(themeId) {
-  const response = await fetch(`${BASE_URL}/themes/${themeId}/assets.json`, { headers: getHeaders() });
-  const data = await response.json();
-  return data.assets || [];
-}
-
 async function getThemeAsset(themeId, key) {
-  const response = await fetch(`${BASE_URL}/themes/${themeId}/assets.json?asset[key]=${key}`, { headers: getHeaders() });
-  const data = await response.json();
-  return data.asset;
+  try {
+    const response = await fetch(`${BASE_URL}/themes/${themeId}/assets.json?asset[key]=${key}`, { headers: getHeaders() });
+    const data = await response.json();
+    return data.asset;
+  } catch {
+    return null;
+  }
 }
 
 async function updateThemeAsset(themeId, key, value) {
   await fetch(`${BASE_URL}/themes/${themeId}/assets.json`, {
     method: 'PUT',
     headers: getHeaders(),
-    body: JSON.stringify({
-      asset: { key, value },
-    }),
+    body: JSON.stringify({ asset: { key, value } }),
   });
 }
 
-async function getThemeSettings(themeId) {
-  const configAsset = await getThemeAsset(themeId, 'config/settings_schema.json');
-  if (!configAsset) return null;
-  
-  try {
-    return JSON.parse(configAsset.value);
-  } catch {
-    return null;
-  }
-}
-
-// ============================================================================
-// GENERATE CUSTOM CSS
-// ============================================================================
-
-function generateDracanusCSS() {
-  return `
-/* DRACANUS AI Brand Theme - Dark Metallic Tech Aesthetic */
-
-:root {
-  --dracanus-primary: ${DRACANUS_THEME.colors.primary};
-  --dracanus-secondary: ${DRACANUS_THEME.colors.secondary};
-  --dracanus-accent: ${DRACANUS_THEME.colors.accent};
-  --dracanus-metallic: ${DRACANUS_THEME.colors.metallic};
-  --dracanus-dark: ${DRACANUS_THEME.colors.dark};
-  --dracanus-text: ${DRACANUS_THEME.colors.text};
-  --dracanus-text-muted: ${DRACANUS_THEME.colors.textMuted};
-}
-
-/* Global Overrides */
-body {
-  background-color: var(--dracanus-primary) !important;
-  color: var(--dracanus-text) !important;
-  font-family: ${DRACANUS_THEME.fonts.body} !important;
-}
-
-/* Headers */
-h1, h2, h3, h4, h5, h6 {
-  color: var(--dracanus-accent) !important;
-  font-family: ${DRACANUS_THEME.fonts.heading} !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em !important;
-}
-
-/* Navigation */
-.header, .site-header {
-  background-color: var(--dracanus-dark) !important;
-  border-bottom: 1px solid var(--dracanus-metallic) !important;
-  box-shadow: ${DRACANUS_THEME.style.shadow} !important;
-}
-
-.header__menu-item, .site-nav__link {
-  color: var(--dracanus-text) !important;
-  font-weight: 500 !important;
-  transition: ${DRACANUS_THEME.style.transition} !important;
-}
-
-.header__menu-item:hover, .site-nav__link:hover {
-  color: var(--dracanus-accent) !important;
-}
-
-/* Buttons */
-.btn, .button, button[type="submit"] {
-  background-color: var(--dracanus-metallic) !important;
-  color: var(--dracanus-accent) !important;
-  border: 1px solid var(--dracanus-metallic) !important;
-  border-radius: ${DRACANUS_THEME.style.borderRadius} !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  transition: ${DRACANUS_THEME.style.transition} !important;
-  box-shadow: ${DRACANUS_THEME.style.shadow} !important;
-}
-
-.btn:hover, .button:hover, button[type="submit"]:hover {
-  background-color: var(--dracanus-accent) !important;
-  color: var(--dracanus-dark) !important;
-  box-shadow: ${DRACANUS_THEME.style.shadowStrong} !important;
-  transform: translateY(-2px) !important;
-}
-
-.btn--primary, .button--primary {
-  background: linear-gradient(135deg, var(--dracanus-metallic) 0%, var(--dracanus-secondary) 100%) !important;
-  border-color: var(--dracanus-accent) !important;
-}
-
-/* Product Cards */
-.product-card, .product-item, .grid__item {
-  background-color: var(--dracanus-secondary) !important;
-  border: 1px solid var(--dracanus-metallic) !important;
-  border-radius: ${DRACANUS_THEME.style.borderRadius} !important;
-  box-shadow: ${DRACANUS_THEME.style.shadow} !important;
-  transition: ${DRACANUS_THEME.style.transition} !important;
-  overflow: hidden !important;
-}
-
-.product-card:hover, .product-item:hover {
-  transform: translateY(-4px) !important;
-  box-shadow: ${DRACANUS_THEME.style.shadowStrong} !important;
-  border-color: var(--dracanus-accent) !important;
-}
-
-.product-card__title, .product-item__title {
-  color: var(--dracanus-accent) !important;
-  font-weight: 600 !important;
-}
-
-.product-card__price, .product-item__price {
-  color: var(--dracanus-text) !important;
-  font-weight: 700 !important;
-}
-
-/* Forms */
-input, textarea, select {
-  background-color: var(--dracanus-secondary) !important;
-  color: var(--dracanus-text) !important;
-  border: 1px solid var(--dracanus-metallic) !important;
-  border-radius: ${DRACANUS_THEME.style.borderRadius} !important;
-}
-
-input:focus, textarea:focus, select:focus {
-  border-color: var(--dracanus-accent) !important;
-  outline: none !important;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Footer */
-.footer, .site-footer {
-  background-color: var(--dracanus-dark) !important;
-  border-top: 1px solid var(--dracanus-metallic) !important;
-  color: var(--dracanus-text-muted) !important;
-}
-
-.footer__link {
-  color: var(--dracanus-text-muted) !important;
-}
-
-.footer__link:hover {
-  color: var(--dracanus-accent) !important;
-}
-
-/* Hero Section */
-.hero, .banner {
-  background: linear-gradient(135deg, var(--dracanus-dark) 0%, var(--dracanus-primary) 100%) !important;
-  border-bottom: 1px solid var(--dracanus-metallic) !important;
-}
-
-.hero__title, .banner__title {
-  color: var(--dracanus-accent) !important;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
-}
-
-/* Badges & Tags */
-.badge, .tag {
-  background-color: var(--dracanus-metallic) !important;
-  color: var(--dracanus-accent) !important;
-  border-radius: ${DRACANUS_THEME.style.borderRadius} !important;
-  font-weight: 600 !important;
-  font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-}
-
-/* Metallic Accent Lines */
-.section-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--dracanus-metallic), transparent);
-  margin: 2rem 0;
-}
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--dracanus-dark);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--dracanus-metallic);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--dracanus-accent);
-}
-
-/* Loading States */
-.loading {
-  border-color: var(--dracanus-metallic) !important;
-  border-top-color: var(--dracanus-accent) !important;
-}
-
-/* Selection */
-::selection {
-  background-color: var(--dracanus-accent) !important;
-  color: var(--dracanus-dark) !important;
-}
-`;
-}
-
-// ============================================================================
-// MAIN
-// ============================================================================
-
 async function main() {
-  console.log('\n🐉 Applying DRACANUS AI Brand Theme\n');
+  console.log('\n🐉 DRACANUS AI Theme Installer\n');
   console.log('='.repeat(50));
 
   if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
@@ -303,64 +185,39 @@ async function main() {
 
   console.log(`Store: ${SHOPIFY_STORE_URL}\n`);
 
-  // Get current theme
-  console.log('📥 Fetching current theme...');
-  const theme = await getCurrentTheme();
-  if (!theme) {
-    console.error('❌ Could not find active theme');
-    process.exit(1);
-  }
-
-  console.log(`   Theme: ${theme.name} (ID: ${theme.id})\n`);
-
-  // Check for existing custom CSS
-  console.log('📝 Checking for custom CSS file...');
-  const assets = await getThemeAssets(theme.id);
-  const hasCustomCSS = assets.some(a => a.key === 'assets/custom.css' || a.key === 'assets/dracanus.css');
-
-  const cssKey = hasCustomCSS ? 'assets/custom.css' : 'assets/dracanus.css';
-  const existingCSS = hasCustomCSS ? await getThemeAsset(theme.id, cssKey) : null;
-
-  // Generate CSS
-  console.log('🎨 Generating DRACANUS brand CSS...');
-  const dracanusCSS = generateDracanusCSS();
-  const finalCSS = existingCSS ? `${existingCSS.value}\n\n${dracanusCSS}` : dracanusCSS;
-
-  // Apply CSS
-  console.log(`   Updating ${cssKey}...`);
   try {
-    await updateThemeAsset(theme.id, cssKey, finalCSS);
-    console.log('   ✅ CSS applied successfully\n');
+    console.log('📡 Fetching current theme...');
+    const theme = await getCurrentTheme();
+    if (!theme) {
+      console.error('❌ Could not find active theme');
+      process.exit(1);
+    }
+
+    console.log(`✅ Found: ${theme.name} (ID: ${theme.id})\n`);
+
+    console.log('🔍 Checking for existing custom.css...');
+    const existingCSS = await getThemeAsset(theme.id, 'assets/custom.css');
+    
+    const finalCSS = existingCSS?.value 
+      ? `${existingCSS.value}\n\n${DRACANUS_CSS}`
+      : DRACANUS_CSS;
+
+    console.log('🎨 Applying DRACANUS theme...');
+    await updateThemeAsset(theme.id, 'assets/custom.css', finalCSS);
+    console.log('✅ Theme applied!\n');
+
+    console.log('='.repeat(50));
+    console.log('🎉 SUCCESS!');
+    console.log('='.repeat(50));
+    console.log('\n💡 Next steps:');
+    console.log('   1. Go to: Online Store > Themes > Customize');
+    console.log('   2. Upload your DRACANUS logo in Header section');
+    console.log('   3. Set colors in Theme Settings (use dark colors)');
+    console.log('   4. Preview and publish!\n');
   } catch (error) {
-    console.error(`   ❌ Failed: ${error.message}\n`);
+    console.error('❌ Error:', error.message);
     process.exit(1);
   }
-
-  // Summary
-  console.log('='.repeat(50));
-  console.log('✅ DRACANUS THEME APPLIED');
-  console.log('='.repeat(50));
-  console.log('\n📋 Next Steps in Shopify Admin:');
-  console.log('   1. Go to: Online Store > Themes > Customize');
-  console.log('   2. Theme Settings > Colors:');
-  console.log(`      - Background: ${DRACANUS_THEME.colors.primary}`);
-  console.log(`      - Text: ${DRACANUS_THEME.colors.text}`);
-  console.log(`      - Accent: ${DRACANUS_THEME.colors.accent}`);
-  console.log('   3. Theme Settings > Typography:');
-  console.log(`      - Heading: ${DRACANUS_THEME.fonts.heading}`);
-  console.log(`      - Body: ${DRACANUS_THEME.fonts.body}`);
-  console.log('   4. Upload your DRACANUS logo in Header section');
-  console.log('   5. Preview and publish!\n');
-  console.log('🎨 Brand Colors:');
-  console.log(`   Primary: ${DRACANUS_THEME.colors.primary}`);
-  console.log(`   Secondary: ${DRACANUS_THEME.colors.secondary}`);
-  console.log(`   Accent: ${DRACANUS_THEME.colors.accent}`);
-  console.log(`   Metallic: ${DRACANUS_THEME.colors.metallic}`);
-  console.log('');
 }
 
-main().catch(err => {
-  console.error('❌ Error:', err.message);
-  process.exit(1);
-});
-
+main();
