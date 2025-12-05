@@ -98,15 +98,18 @@ export async function generateDescription(
  * Generate product-type-specific image prompts
  */
 function getImagePromptForProductType(title: string, productType: string): string {
-  const basePrompt = `Professional digital product cover art, clean modern design, high contrast, no text or watermarks`;
+  // DRACANUS AI Brand Style (dark, metallic, tech-forward)
+  const dracanusBase = `Dark charcoal gray background (#1a1a1a), metallic silver accents (#ffffff), tech-forward aesthetic, sharp angular design, high contrast, premium feel, circuit board patterns, dragon-inspired geometric elements`;
+  
+  const basePrompt = `Professional digital product cover art, ${dracanusBase}, no text or watermarks`;
   
   const typePrompts: Record<string, string> = {
-    'prompt_pack': `${basePrompt}, neon cyberpunk aesthetic, dark background with glowing accents, futuristic digital artwork style, abstract geometric patterns, representing "${title}"`,
-    'automation_kit': `${basePrompt}, tech workflow diagram aesthetic, clean professional design, blue and white color scheme, interconnected nodes and lines, circuit board inspired, representing "${title}"`,
-    'bundle': `${basePrompt}, premium package mockup, luxury aesthetic, dark elegant background, gold accents, multiple product showcase, high-end digital bundle, representing "${title}"`,
-    'Digital Artwork': `${basePrompt}, artistic digital illustration, vibrant colors, creative design, abstract elements, representing "${title}"`,
-    'Digital Services': `${basePrompt}, professional service visualization, clean business aesthetic, blue tones, modern minimalist, representing "${title}"`,
-    'Digital Bundle': `${basePrompt}, premium bundle display, multiple items showcase, elegant presentation, dark background with highlights, representing "${title}"`,
+    'prompt_pack': `${basePrompt}, neon cyberpunk aesthetic, dark background with glowing white accents, futuristic digital artwork style, abstract geometric patterns, circuit board motifs, representing "${title}"`,
+    'automation_kit': `${basePrompt}, tech workflow diagram aesthetic, clean professional design, dark gray and white color scheme, interconnected nodes and lines, circuit board inspired, metallic accents, representing "${title}"`,
+    'bundle': `${basePrompt}, premium package mockup, luxury dark aesthetic, charcoal gray elegant background, bright white accents, multiple product showcase, high-end digital bundle, metallic sheen, representing "${title}"`,
+    'Digital Artwork': `${basePrompt}, artistic digital illustration, dark tech aesthetic, metallic highlights, geometric dragon-inspired elements, representing "${title}"`,
+    'Digital Services': `${basePrompt}, professional service visualization, dark business aesthetic, charcoal and white tones, modern minimalist, sharp angles, representing "${title}"`,
+    'Digital Bundle': `${basePrompt}, premium bundle display, multiple items showcase, elegant dark presentation, charcoal background with white highlights, metallic accents, representing "${title}"`,
   };
   
   // Find matching prompt or use default
@@ -118,23 +121,24 @@ function getImagePromptForProductType(title: string, productType: string): strin
     return typePrompts[matchedType];
   }
   
-  // Default prompt for unknown types
-  return `${basePrompt}, sleek digital product visualization, modern tech aesthetic, gradient background, representing "${title}"`;
+  // Default prompt with DRACANUS branding
+  return `${basePrompt}, sleek digital product visualization, dark tech aesthetic, charcoal gray background, white metallic accents, sharp geometric design, representing "${title}"`;
 }
 
 /**
  * Generate product image using Gemini Flash or Nano Banana (Imagen 4)
  * @param title - Product title
  * @param productType - Product type for specialized prompts
+ * @param customPrompt - Optional custom prompt (overrides default)
  * @returns Promise<string> - Base64 encoded image data
  */
-export async function generateImage(title: string, productType: string = 'digital'): Promise<string> {
+export async function generateImage(title: string, productType: string = 'digital', customPrompt?: string): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY environment variable is not set');
   }
 
-  // Get product-type-specific prompt
-  const imagePrompt = getImagePromptForProductType(title, productType);
+  // Use custom prompt if provided, otherwise get product-type-specific prompt
+  const imagePrompt = customPrompt || getImagePromptForProductType(title, productType);
   console.log(`[Gemini] Generating image with prompt: ${imagePrompt.substring(0, 100)}...`);
 
   const model = await getBestImageModel();
@@ -163,7 +167,8 @@ export async function generateImage(title: string, productType: string = 'digita
  */
 export async function generateProductImage(
   title: string,
-  productType: string
+  productType: string,
+  customPrompt?: string
 ): Promise<{ base64?: string; url?: string; source: 'ai' | 'placeholder' }> {
   // Check if Imagen is enabled
   const enableImagen = process.env.ENABLE_AI_IMAGES !== 'false';
@@ -174,7 +179,7 @@ export async function generateProductImage(
   }
   
   try {
-    const base64 = await generateImage(title, productType);
+    const base64 = await generateImage(title, productType, customPrompt);
     return { base64, source: 'ai' };
   } catch (error: any) {
     console.warn(`[Gemini] Image generation failed, falling back to placeholder: ${error.message}`);

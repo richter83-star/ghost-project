@@ -29,6 +29,7 @@ import {
 import { sendRecommendationEmail } from './notifications.js';
 import { applyRecommendation, revertChange, previewChange } from './theme-modifier.js';
 import { getBrandProfile } from './brand-analyzer.js';
+import { getDracanusBrandProfile } from './dracanus-brand.js';
 import { applyThemeSettings, applyDracanusThemeAuto } from './theme-settings.js';
 import { DesignRecommendation } from './types.js';
 
@@ -45,17 +46,26 @@ export async function runDesignAgent(): Promise<{
   try {
     // 0. Analyze brand and apply theme settings automatically
     console.log('[DesignAgent] 🎨 Analyzing brand and applying theme...');
-    const brandProfile = await getBrandProfile();
     
-    if (brandProfile) {
-      // Apply theme settings (colors, fonts) based on brand profile
-      await applyThemeSettings(brandProfile);
-      console.log('[DesignAgent] ✅ Brand-based theme settings applied');
+    // Use pre-configured DRACANUS brand profile for faster setup
+    const dracanusProfile = getDracanusBrandProfile();
+    
+    // Try to get logo from Shopify, but use DRACANUS profile as base
+    const shopifyBrand = await getBrandProfile();
+    const brandProfile = shopifyBrand || dracanusProfile;
+    
+    // Merge any logo-specific findings with DRACANUS defaults
+    if (shopifyBrand && shopifyBrand.logoUrl) {
+      console.log('[DesignAgent] Logo found, using brand analysis + DRACANUS defaults');
+      // Merge colors if logo analysis found different ones
+      brandProfile.colors = { ...dracanusProfile.colors, ...shopifyBrand.colors };
     } else {
-      // Fallback: Apply DRACANUS theme if no logo found
-      console.log('[DesignAgent] No logo found, applying DRACANUS default theme...');
-      await applyDracanusThemeAuto();
+      console.log('[DesignAgent] Using pre-configured DRACANUS brand profile');
     }
+    
+    // Apply theme settings (colors, fonts) based on brand profile
+    await applyThemeSettings(brandProfile);
+    console.log('[DesignAgent] ✅ DRACANUS theme settings applied');
 
     // 1. Collect store analytics
     const analytics = await collectStoreAnalytics();
@@ -103,17 +113,22 @@ export async function runDesignAgent(): Promise<{
           const productsToProcess = productsNeedingImages.slice(0, 10);
           let generated = 0;
           
+          const { getDracanusImagePrompt } = await import('./dracanus-brand.js');
+          
           for (const product of productsToProcess) {
             try {
-              console.log(`[DesignAgent] Generating image for: ${product.title}`);
-              const imageResult = await generateProductImage(product.title, product.product_type || 'digital');
+              console.log(`[DesignAgent] Generating DRACANUS-branded image for: ${product.title}`);
+              
+              // Use DRACANUS-optimized prompt for faster, brand-aligned generation
+              const customPrompt = getDracanusImagePrompt(product.title, product.product_type || 'digital');
+              const imageResult = await generateProductImage(product.title, product.product_type || 'digital', customPrompt);
               
               if (imageResult.base64) {
                 await updateProduct(String(product.id), {
                   images: [{ attachment: imageResult.base64 }],
                 });
                 generated++;
-                console.log(`[DesignAgent] ✅ Generated image for: ${product.title}`);
+                console.log(`[DesignAgent] ✅ Generated DRACANUS image for: ${product.title}`);
               }
               
               // Rate limiting - wait 2 seconds between images
