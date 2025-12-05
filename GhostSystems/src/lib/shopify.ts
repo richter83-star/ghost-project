@@ -657,6 +657,83 @@ export async function getStoreMetafields(): Promise<any[]> {
 }
 
 /**
+ * Delete a product image
+ */
+export async function deleteProductImage(productId: string, imageId: string): Promise<void> {
+  try {
+    await axios.delete(
+      `${BASE_URL}/products/${productId}/images/${imageId}.json`,
+      { headers: getHeaders() }
+    );
+    console.log(`[Shopify] ✅ Deleted image ${imageId} from product ${productId}`);
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to delete image ${imageId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Replace product images - deletes old placeholder images and sets new primary image
+ */
+export async function replaceProductImages(
+  productId: string,
+  newImageBase64: string,
+  deletePlaceholders: boolean = true
+): Promise<void> {
+  try {
+    // Get current product to check existing images
+    const product = await axios.get(
+      `${BASE_URL}/products/${productId}.json`,
+      { headers: getHeaders() }
+    );
+    
+    const existingImages = product.data?.product?.images || [];
+    
+    // Delete placeholder images if requested
+    if (deletePlaceholders && existingImages.length > 0) {
+      for (const image of existingImages) {
+        const src = image.src || '';
+        // Check if it's a placeholder (picsum, placeholder, unsplash nature images)
+        if (src.includes('picsum') || 
+            src.includes('placeholder') || 
+            src.includes('unsplash') ||
+            src.includes('lorem') ||
+            src.includes('nature') ||
+            src.includes('seed=')) {
+          console.log(`[Shopify] Deleting placeholder image: ${image.id}`);
+          try {
+            await deleteProductImage(productId, String(image.id));
+            // Small delay between deletions
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (error: any) {
+            console.warn(`[Shopify] Could not delete image ${image.id}:`, error.message);
+          }
+        }
+      }
+    }
+    
+    // Add new image as primary (first image becomes primary in Shopify)
+    const response = await axios.post(
+      `${BASE_URL}/products/${productId}/images.json`,
+      {
+        image: {
+          attachment: newImageBase64,
+          filename: `dracanus-${productId}.png`,
+        },
+      },
+      { headers: getHeaders() }
+    );
+    
+    if (response.data?.image?.id) {
+      console.log(`[Shopify] ✅ Added new primary image to product ${productId}`);
+    }
+  } catch (error: any) {
+    console.error(`[Shopify] Failed to replace images for product ${productId}:`, error.message);
+    throw error;
+  }
+}
+
+/**
  * Update a product (for SEO, descriptions, etc.)
  */
 export async function updateProduct(

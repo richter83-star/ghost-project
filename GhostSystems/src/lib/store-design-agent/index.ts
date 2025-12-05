@@ -124,11 +124,11 @@ export async function runDesignAgent(): Promise<{
               const imageResult = await generateProductImage(product.title, product.product_type || 'digital', customPrompt);
               
               if (imageResult.base64) {
-                await updateProduct(String(product.id), {
-                  images: [{ attachment: imageResult.base64 }],
-                });
+                // Replace images - delete placeholders and set DRACANUS as primary
+                const { replaceProductImages } = await import('../shopify.js');
+                await replaceProductImages(String(product.id), imageResult.base64, true);
                 generated++;
-                console.log(`[DesignAgent] ✅ Generated DRACANUS image for: ${product.title}`);
+                console.log(`[DesignAgent] ✅ Replaced placeholder with DRACANUS image for: ${product.title}`);
               }
               
               // Rate limiting - wait 2 seconds between images
