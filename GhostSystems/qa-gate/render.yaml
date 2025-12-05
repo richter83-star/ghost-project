@@ -1,0 +1,50 @@
+services:
+  - type: worker
+    name: qa-gate
+    env: node
+    plan: free
+    rootDir: ./GhostSystems/qa-gate
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      # Required
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
+      
+      # Optional (with defaults)
+      - key: FIRESTORE_JOBS_COLLECTION
+        value: products
+        sync: false
+      - key: QA_SCAN_STATUSES
+        value: pending,draft
+        sync: false
+      - key: QA_WRITE_STATUS
+        value: "true"
+        sync: false
+      - key: QA_PASSED_STATUS
+        value: qa_passed
+        sync: false
+      - key: QA_FAILED_STATUS
+        value: qa_failed
+        sync: false
+      - key: QA_BATCH_LIMIT
+        value: "25"
+        sync: false
+      - key: QA_SCAN_CRON
+        value: "*/15 * * * *"
+        sync: false
+      - key: QA_MIN_ARTIFACT_BYTES
+        value: "5000"
+        sync: false
+      - key: QA_REQUIRE_README_IN_ZIP
+        value: "true"
+        sync: false
+      - key: QA_HTTP_ENABLED
+        value: "false"
+        sync: false
+      - key: QA_HTTP_PORT
+        value: "8089"
+        sync: false
+
