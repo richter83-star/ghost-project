@@ -16,7 +16,8 @@ function parseMoney(v: any): number | undefined {
 
 export async function qaOne(productId: string) {
   const db = getDb();
-  const ref = db.collection("products").doc(productId);
+  const collectionName = config.firestore.collectionName;
+  const ref = db.collection(collectionName).doc(productId);
   const doc = await ref.get();
 
   if (!doc.exists) {
@@ -42,7 +43,7 @@ export async function qaOne(productId: string) {
   const qa = await evaluateProduct(product);
 
   // Duplicate detection: fail if duplicates exist and no grouping fields
-  const dup = await findDuplicates(db, qa.concept_key, doc.id);
+  const dup = await findDuplicates(db, config.firestore.collectionName, qa.concept_key, doc.id);
   const hasNoGrouping = !product.product_group_id && !product.variant_of;
 
   let fail_reasons = qa.fail_reasons.slice();
@@ -85,15 +86,17 @@ export async function qaSweepOnce() {
 
   let processed = 0;
 
+  const collectionName = config.firestore.collectionName;
+  
   for (const st of statuses) {
-    const snap = await db.collection("products")
+    const snap = await db.collection(collectionName)
       .where("status", "==", st)
       .orderBy("updated_at", "desc")
       .limit(config.qa.batchLimit)
       .get()
       .catch(async () => {
         // fallback if no index on updated_at
-        return db.collection("products").where("status", "==", st).limit(config.qa.batchLimit).get();
+        return db.collection(collectionName).where("status", "==", st).limit(config.qa.batchLimit).get();
       });
 
     for (const doc of snap.docs) {

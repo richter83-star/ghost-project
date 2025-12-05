@@ -6,6 +6,8 @@ const schema = z.object({
   FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
 
+  FIRESTORE_JOBS_COLLECTION: z.string().default("products"),
+
   QA_SCAN_STATUSES: z.string().default("pending,draft"),
   QA_WRITE_STATUS: z.string().default("true"),
   QA_PASSED_STATUS: z.string().default("qa_passed"),
@@ -28,6 +30,9 @@ export const config = {
     projectId: env.FIREBASE_PROJECT_ID,
     serviceAccountJson: env.FIREBASE_SERVICE_ACCOUNT_JSON,
     serviceAccountPath: env.FIREBASE_SERVICE_ACCOUNT_PATH
+  },
+  firestore: {
+    collectionName: env.FIRESTORE_JOBS_COLLECTION
   },
   qa: {
     scanStatuses: env.QA_SCAN_STATUSES.split(",").map(s => s.trim()).filter(Boolean),
