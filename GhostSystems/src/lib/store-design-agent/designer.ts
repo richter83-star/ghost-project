@@ -6,7 +6,7 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import {
   DesignRecommendation,
   StoreAnalytics,
@@ -14,6 +14,9 @@ import {
   RecommendationPriority,
 } from './types.js';
 import { getBrandProfile, generateBrandPrompt, BrandProfile } from './brand-analyzer.js';
+
+// Use Node's built-in crypto.randomUUID instead of uuid package
+const uuidv4 = () => randomUUID();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
