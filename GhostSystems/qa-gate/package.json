@@ -11,6 +11,7 @@
     "start": "node --enable-source-maps dist/index.js",
     "build": "tsc -p tsconfig.json",
     "prestart": "npm run build",
+    "test:config": "node test-qa.mjs",
     "lint": "node -e \"console.log('no-lint configured')\""
   },
   "dependencies": {

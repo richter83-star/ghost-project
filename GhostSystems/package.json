@@ -23,6 +23,7 @@
     "qa:dev": "cd qa-gate && npm run dev",
     "qa:build": "cd qa-gate && npm run build",
     "qa:start": "cd qa-gate && npm start",
+    "qa:test": "cd qa-gate && npm run test:config",
         "adaptive-ai:analyze": "tsx src/cli/adaptive-ai.ts analyze",
         "adaptive-ai:generate": "tsx src/cli/adaptive-ai.ts generate",
         "theme:dracanus": "tsx src/cli/apply-dracanus-theme.ts",
