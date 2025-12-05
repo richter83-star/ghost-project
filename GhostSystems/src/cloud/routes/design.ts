@@ -1048,10 +1048,9 @@ router.post('/generate-images', async (req, res) => {
         // Generate AI image
         const base64Image = await generateImage(product.title, product.product_type || 'digital');
         
-        // Upload to Shopify
-        await updateProduct(product.id, {
-          images: [{ attachment: base64Image }],
-        });
+        // Replace images - delete placeholders and set DRACANUS as primary
+        const { replaceProductImages } = await import('../../lib/shopify.js');
+        await replaceProductImages(String(product.id), base64Image, true);
         
         generated++;
         results.push({
