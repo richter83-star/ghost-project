@@ -53,18 +53,18 @@ function detectCountFromTextFile(filePath: string): number | null {
 
 function checkZip(zipPath: string) {
   const zip = new AdmZip(zipPath);
-  const entries = zip.getEntries().map(e => e.entryName);
-  const lower = entries.map(e => e.toLowerCase());
+  const entries = zip.getEntries().map((e: any) => e.entryName);
+  const lower = entries.map((e: string) => e.toLowerCase());
 
   const hasReadme =
-    lower.some(e => e.endsWith("readme.md")) ||
-    lower.some(e => e.endsWith("readme.txt")) ||
-    lower.some(e => e.includes("readme"));
+    lower.some((e: string) => e.endsWith("readme.md")) ||
+    lower.some((e: string) => e.endsWith("readme.txt")) ||
+    lower.some((e: string) => e.includes("readme"));
 
   // Try to locate a prompts file
   let promptCountDetected: number | null = null;
 
-  const promptsJsonIdx = lower.findIndex(e => e.endsWith("prompts.json"));
+  const promptsJsonIdx = lower.findIndex((e: string) => e.endsWith("prompts.json"));
   if (promptsJsonIdx >= 0) {
     const entry = zip.getEntry(entries[promptsJsonIdx]);
     if (entry) {
@@ -80,12 +80,12 @@ function checkZip(zipPath: string) {
   }
 
   if (promptCountDetected == null) {
-    const promptsTxtIdx = lower.findIndex(e => e.endsWith("prompts.txt"));
+    const promptsTxtIdx = lower.findIndex((e: string) => e.endsWith("prompts.txt"));
     if (promptsTxtIdx >= 0) {
       const entry = zip.getEntry(entries[promptsTxtIdx]);
       if (entry) {
         const raw = entry.getData().toString("utf8");
-        const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
+        const lines = raw.split("\n").map((l: string) => l.trim()).filter(Boolean);
         if (lines.length > 0) promptCountDetected = lines.length;
       }
     }
