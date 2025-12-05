@@ -11,6 +11,7 @@ export * from './approval-queue.js';
 export * from './notifications.js';
 export * from './theme-modifier.js';
 export * from './brand-analyzer.js';
+export * from './theme-settings.js';
 
 import { collectStoreAnalytics } from './analytics.js';
 import { generateRecommendations } from './designer.js';
@@ -27,6 +28,8 @@ import {
 } from './approval-queue.js';
 import { sendRecommendationEmail } from './notifications.js';
 import { applyRecommendation, revertChange, previewChange } from './theme-modifier.js';
+import { getBrandProfile } from './brand-analyzer.js';
+import { applyThemeSettings, applyDracanusThemeAuto } from './theme-settings.js';
 import { DesignRecommendation } from './types.js';
 
 /**
@@ -40,6 +43,20 @@ export async function runDesignAgent(): Promise<{
   console.log('[DesignAgent] 🚀 Starting design agent run...');
 
   try {
+    // 0. Analyze brand and apply theme settings automatically
+    console.log('[DesignAgent] 🎨 Analyzing brand and applying theme...');
+    const brandProfile = await getBrandProfile();
+    
+    if (brandProfile) {
+      // Apply theme settings (colors, fonts) based on brand profile
+      await applyThemeSettings(brandProfile);
+      console.log('[DesignAgent] ✅ Brand-based theme settings applied');
+    } else {
+      // Fallback: Apply DRACANUS theme if no logo found
+      console.log('[DesignAgent] No logo found, applying DRACANUS default theme...');
+      await applyDracanusThemeAuto();
+    }
+
     // 1. Collect store analytics
     const analytics = await collectStoreAnalytics();
     if (!analytics) {
