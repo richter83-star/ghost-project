@@ -673,7 +673,8 @@ export async function deleteProductImage(productId: string, imageId: string): Pr
 }
 
 /**
- * Replace product images - deletes old placeholder images and sets new primary image
+ * Replace product images - deletes ALL existing images and sets new primary image
+ * This ensures the new image becomes the primary (first) image in Shopify
  */
 export async function replaceProductImages(
   productId: string,
@@ -689,30 +690,45 @@ export async function replaceProductImages(
     
     const existingImages = product.data?.product?.images || [];
     
-    // Delete placeholder images if requested
+    // Delete ALL existing images to ensure new image becomes primary
+    // In Shopify, the first image in the array is the primary/featured image
+    // By deleting all images first, the new image will be the only one (and thus primary)
     if (deletePlaceholders && existingImages.length > 0) {
+      console.log(`[Shopify] Deleting ALL ${existingImages.length} existing image(s) from product ${productId}...`);
+      
       for (const image of existingImages) {
-        const src = image.src || '';
-        // Check if it's a placeholder (picsum, placeholder, unsplash nature images)
-        if (src.includes('picsum') || 
-            src.includes('placeholder') || 
-            src.includes('unsplash') ||
-            src.includes('lorem') ||
-            src.includes('nature') ||
-            src.includes('seed=')) {
-          console.log(`[Shopify] Deleting placeholder image: ${image.id}`);
-          try {
-            await deleteProductImage(productId, String(image.id));
-            // Small delay between deletions
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (error: any) {
-            console.warn(`[Shopify] Could not delete image ${image.id}:`, error.message);
-          }
+        const src = (image.src || '').toLowerCase();
+        const isPlaceholder = (
+          src.includes('picsum') || 
+          src.includes('placeholder') || 
+          src.includes('unsplash') ||
+          src.includes('lorem') ||
+          src.includes('nature') ||
+          src.includes('seed=') ||
+          src.includes('random') ||
+          src.includes('placeholder.com') ||
+          src.match(/\/\d+\/\d+/) || // Pattern like /800/800 (picsum)
+          src.includes('no-image') ||
+          src.includes('gift-card')
+        );
+        
+        console.log(`[Shopify] Deleting image ${image.id}${isPlaceholder ? ' (placeholder)' : ' (all images being removed)'}: ${src.substring(0, 60)}...`);
+        try {
+          await deleteProductImage(productId, String(image.id));
+          // Small delay between deletions to avoid rate limits
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (error: any) {
+          console.warn(`[Shopify] Could not delete image ${image.id}:`, error.message);
         }
       }
+      
+      // Wait a bit longer after all deletions to ensure Shopify processes them
+      console.log(`[Shopify] Waiting for deletions to process...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
     
-    // Add new image as primary (first image becomes primary in Shopify)
+    // Add new image - it will be the only image (and thus primary) or first if others remain
+    console.log(`[Shopify] Adding new DRACANUS image to product ${productId}...`);
     const response = await axios.post(
       `${BASE_URL}/products/${productId}/images.json`,
       {
@@ -725,7 +741,9 @@ export async function replaceProductImages(
     );
     
     if (response.data?.image?.id) {
-      console.log(`[Shopify] ✅ Added new primary image to product ${productId}`);
+      console.log(`[Shopify] ✅ Added new primary image (ID: ${response.data.image.id}) to product ${productId}`);
+    } else {
+      throw new Error('Failed to add new image - no image ID returned');
     }
   } catch (error: any) {
     console.error(`[Shopify] Failed to replace images for product ${productId}:`, error.message);

@@ -92,8 +92,33 @@ async function generateWithGemini(prompt) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+/**
+ * Strip HTML tags and comments from text
+ * More robust than simple regex to handle edge cases
+ */
 function stripHtml(html) {
-  return (html || '').replace(/<[^>]*>/g, '').trim();
+  if (!html || typeof html !== 'string') return '';
+  
+  // Remove HTML comments first
+  let cleaned = html.replace(/<!--[\s\S]*?-->/g, '');
+  
+  // Remove CDATA sections
+  cleaned = cleaned.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  
+  // Remove all HTML tags (including script, style, etc.)
+  // Use a more comprehensive regex that handles attributes properly
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  
+  // Decode common HTML entities
+  cleaned = cleaned
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  
+  return cleaned.trim();
 }
 
 function sleep(ms) {

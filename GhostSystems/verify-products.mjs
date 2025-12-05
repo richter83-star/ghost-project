@@ -36,11 +36,38 @@ async function fetchProducts() {
     const response = await fetch(url, { headers: getHeaders() });
     const data = await response.json();
     
+    /**
+     * Strip HTML tags and comments from text
+     */
+    function stripHtml(html) {
+      if (!html || typeof html !== 'string') return '';
+      
+      // Remove HTML comments first
+      let cleaned = html.replace(/<!--[\s\S]*?-->/g, '');
+      
+      // Remove CDATA sections
+      cleaned = cleaned.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+      
+      // Remove all HTML tags (including script, style, etc.)
+      cleaned = cleaned.replace(/<[^>]+>/g, '');
+      
+      // Decode common HTML entities
+      cleaned = cleaned
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+      
+      return cleaned.trim();
+    }
+    
     for (const p of data.products) {
       products.push({
         id: String(p.id),
         title: p.title,
-        description: (p.body_html || '').replace(/<[^>]*>/g, ''),
+        description: stripHtml(p.body_html || ''),
         productType: p.product_type,
         price: parseFloat(p.variants?.[0]?.price || '0'),
         images: p.images || [],

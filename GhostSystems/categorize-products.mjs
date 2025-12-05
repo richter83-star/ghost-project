@@ -100,9 +100,36 @@ const CATEGORIES = {
 const DEFAULT_PROMPT = { productType: 'AI Prompt Pack', tags: ['prompts', 'ai'] };
 const DEFAULT_AUTO = { productType: 'Automation Kit', tags: ['automation', 'workflow'] };
 
+/**
+ * Strip HTML tags and comments from text
+ */
+function stripHtml(html) {
+  if (!html || typeof html !== 'string') return '';
+  
+  // Remove HTML comments first
+  let cleaned = html.replace(/<!--[\s\S]*?-->/g, '');
+  
+  // Remove CDATA sections
+  cleaned = cleaned.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+  
+  // Remove all HTML tags (including script, style, etc.)
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  
+  // Decode common HTML entities
+  cleaned = cleaned
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  
+  return cleaned.trim();
+}
+
 function categorizeProduct(product) {
   const title = (product.title || '').toLowerCase();
-  const description = (product.body_html || '').toLowerCase().replace(/<[^>]*>/g, '');
+  const description = stripHtml(product.body_html || '').toLowerCase();
   const existingType = (product.product_type || '').toLowerCase();
   const combined = `${title} ${description} ${existingType}`;
 

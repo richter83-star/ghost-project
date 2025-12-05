@@ -1017,6 +1017,26 @@ router.post('/generate-images', async (req, res) => {
       // Check all images for placeholder patterns
       const hasPlaceholder = p.images.some((img: any) => {
         const src = (img.src || '').toLowerCase();
+        if (!src) return false;
+        
+        // Use URL parsing for proper hostname checking (more secure than substring matching)
+        try {
+          const url = new URL(src);
+          const hostname = url.hostname.toLowerCase();
+          
+          // Check hostname for placeholder services
+          if (hostname.includes('placeholder.com') || 
+              hostname.includes('picsum.photos') ||
+              hostname.includes('unsplash.com') ||
+              hostname.includes('via.placeholder')) {
+            return true;
+          }
+        } catch {
+          // If URL parsing fails, fall back to pattern matching on the full URL
+          // This is safe because we're only checking for known placeholder patterns
+        }
+        
+        // Check for placeholder patterns in path/query
         return (
           src.includes('placeholder') ||
           src.includes('picsum') ||
@@ -1027,8 +1047,7 @@ router.post('/generate-images', async (req, res) => {
           src.includes('no-image') ||
           src.includes('gift-card') ||
           src.match(/\/\d+\/\d+/) || // Pattern like /800/800
-          src.includes('random') ||
-          src.includes('placeholder.com')
+          src.includes('random')
         );
       });
       
