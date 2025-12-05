@@ -295,11 +295,13 @@ export function startShopifyPipeline() {
   const collectionName = process.env.FIRESTORE_JOBS_COLLECTION || 'products';
 
   console.log(
-    `[ShopifyPipeline] 📡 Listening for products with status = "draft" in collection "${collectionName}"...`
+    `[ShopifyPipeline] 📡 Listening for products with status = "qa_passed" (QA Gate enforced) in collection "${collectionName}"...`
   );
 
   const productsRef = db.collection(collectionName);
-  const query = productsRef.where('status', '==', 'draft');
+  // QA Gate: Only process products that have passed QA
+  // Check for either status == "qa_passed" OR qa.status == "passed"
+  const query = productsRef.where('status', '==', 'qa_passed');
 
   query.onSnapshot(
     (snapshot) => {
