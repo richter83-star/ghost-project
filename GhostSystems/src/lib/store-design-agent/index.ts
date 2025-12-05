@@ -102,8 +102,27 @@ export async function runDesignAgent(): Promise<{
         const products = await fetchProducts();
         const productsNeedingImages = products.filter((p: any) => {
           if (!p.images || p.images.length === 0) return true;
-          const src = p.images[0]?.src || '';
-          return src.includes('placeholder') || src.includes('picsum') || src.includes('no-image');
+          
+          // Check all images, not just the first one
+          const hasPlaceholder = p.images.some((img: any) => {
+            const src = (img.src || '').toLowerCase();
+            return (
+              src.includes('placeholder') ||
+              src.includes('picsum') ||
+              src.includes('unsplash') ||
+              src.includes('lorem') ||
+              src.includes('seed=') ||
+              src.includes('nature') ||
+              src.includes('no-image') ||
+              src.includes('gift-card') ||
+              // Check for common placeholder patterns
+              src.match(/\/\d+\/\d+/) || // Pattern like /800/800 (picsum)
+              src.includes('random') ||
+              src.includes('placeholder.com')
+            );
+          });
+          
+          return hasPlaceholder;
         });
 
         if (productsNeedingImages.length > 0) {

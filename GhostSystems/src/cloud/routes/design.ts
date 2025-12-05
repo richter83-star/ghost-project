@@ -1013,9 +1013,26 @@ router.post('/generate-images', async (req, res) => {
     const productsNeedingImages = products.filter((p: any) => {
       if (forceReplace) return true;
       if (!p.images || p.images.length === 0) return true;
-      // Check for placeholder images
-      const src = p.images[0]?.src || '';
-      return src.includes('placeholder') || src.includes('picsum');
+      
+      // Check all images for placeholder patterns
+      const hasPlaceholder = p.images.some((img: any) => {
+        const src = (img.src || '').toLowerCase();
+        return (
+          src.includes('placeholder') ||
+          src.includes('picsum') ||
+          src.includes('unsplash') ||
+          src.includes('lorem') ||
+          src.includes('seed=') ||
+          src.includes('nature') ||
+          src.includes('no-image') ||
+          src.includes('gift-card') ||
+          src.match(/\/\d+\/\d+/) || // Pattern like /800/800
+          src.includes('random') ||
+          src.includes('placeholder.com')
+        );
+      });
+      
+      return hasPlaceholder;
     }).slice(0, limit);
     
     console.log(`[DesignAgent] Found ${productsNeedingImages.length} products needing images`);
