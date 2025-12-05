@@ -81,7 +81,58 @@ export async function runDesignAgent(): Promise<{
     // 4. Send email notification
     await sendRecommendationEmail(recommendations);
 
-    // 5. Auto-apply if configured
+    // 5. Auto-generate images for products with placeholders
+    const autoGenerateImages = process.env.DESIGN_AGENT_AUTO_GENERATE_IMAGES !== 'false'; // Default: true
+    if (autoGenerateImages) {
+      console.log('[DesignAgent] 🖼️ Auto-generating images for products with placeholders...');
+      try {
+        const { fetchProducts, updateProduct } = await import('../shopify.js');
+        const { generateProductImage } = await import('../gemini.js');
+        
+        const products = await fetchProducts();
+        const productsNeedingImages = products.filter((p: any) => {
+          if (!p.images || p.images.length === 0) return true;
+          const src = p.images[0]?.src || '';
+          return src.includes('placeholder') || src.includes('picsum') || src.includes('no-image');
+        });
+
+        if (productsNeedingImages.length > 0) {
+          console.log(`[DesignAgent] Found ${productsNeedingImages.length} products needing AI images`);
+          
+          // Generate images for first 10 products (to avoid rate limits)
+          const productsToProcess = productsNeedingImages.slice(0, 10);
+          let generated = 0;
+          
+          for (const product of productsToProcess) {
+            try {
+              console.log(`[DesignAgent] Generating image for: ${product.title}`);
+              const imageResult = await generateProductImage(product.title, product.product_type || 'digital');
+              
+              if (imageResult.base64) {
+                await updateProduct(String(product.id), {
+                  images: [{ attachment: imageResult.base64 }],
+                });
+                generated++;
+                console.log(`[DesignAgent] ✅ Generated image for: ${product.title}`);
+              }
+              
+              // Rate limiting - wait 2 seconds between images
+              await new Promise(resolve => setTimeout(resolve, 2000));
+            } catch (error: any) {
+              console.warn(`[DesignAgent] Failed to generate image for ${product.title}:`, error.message);
+            }
+          }
+          
+          console.log(`[DesignAgent] ✅ Generated ${generated} AI images`);
+        } else {
+          console.log('[DesignAgent] All products already have images');
+        }
+      } catch (error: any) {
+        console.warn('[DesignAgent] Image generation failed:', error.message);
+      }
+    }
+
+    // 6. Auto-apply if configured
     const autoApply = process.env.DESIGN_AGENT_AUTO_APPLY === 'true';
     if (autoApply) {
       console.log('[DesignAgent] Auto-apply enabled, applying high-confidence recommendations...');
