@@ -272,7 +272,7 @@ async function processQueue() {
 
 /**
  * Start the Shopify product pipeline listener
- * Watches for products with status "draft" and processes them
+ * Watches for products with status "qa_passed" (QA Gate enforced) and processes them
  */
 export function startShopifyPipeline() {
   initFirebase();
@@ -300,7 +300,7 @@ export function startShopifyPipeline() {
 
   const productsRef = db.collection(collectionName);
   // QA Gate: Only process products that have passed QA
-  // Check for either status == "qa_passed" OR qa.status == "passed"
+  // Strict requirement: status MUST be "qa_passed" to be published
   const query = productsRef.where('status', '==', 'qa_passed');
 
   query.onSnapshot(
