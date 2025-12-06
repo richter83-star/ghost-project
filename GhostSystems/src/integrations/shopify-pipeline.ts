@@ -61,9 +61,18 @@ async function processDraftProduct(docSnap: FirebaseFirestore.QueryDocumentSnaps
   const productId = docSnap.id;
   const data = docSnap.data();
   const title = (data as any)?.title || '(no title)';
+  const status = (data as any)?.status;
+
+  // QA Gate enforcement: Double-check status before processing
+  if (status !== 'qa_passed') {
+    console.warn(
+      `[ShopifyPipeline] ⚠️ Skipping product ${productId} - status is "${status}", expected "qa_passed"`
+    );
+    return;
+  }
 
   console.log(
-    `[ShopifyPipeline] Processing DRAFT product: ${productId} - "${title}"`
+    `[ShopifyPipeline] Processing QA-PASSED product: ${productId} - "${title}"`
   );
 
   try {
