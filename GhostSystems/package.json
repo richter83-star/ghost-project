@@ -27,6 +27,8 @@
         "adaptive-ai:analyze": "tsx src/cli/adaptive-ai.ts analyze",
         "adaptive-ai:generate": "tsx src/cli/adaptive-ai.ts generate",
         "theme:dracanus": "tsx src/cli/apply-dracanus-theme.ts",
+        "theme:force": "node force-apply-theme.mjs",
+        "generate:products": "node generate-75-products.mjs",
     "py:init": "python -m pip install -r python/requirements.txt",
     "py:gen": "python python/product_generator.py",
     "py:fmt": "python python/formatter.py"

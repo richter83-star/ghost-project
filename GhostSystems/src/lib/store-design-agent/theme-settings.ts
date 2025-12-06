@@ -70,10 +70,65 @@ export async function applyThemeSettings(brandProfile: BrandProfile): Promise<{
     await updateThemeAsset(theme.id, 'config/settings_data.json', JSON.stringify(settings, null, 2));
     console.log('[DesignAgent] ✅ Theme settings applied');
 
+    // Also inject CSS variables as fallback
+    await injectCSSVariables(theme.id, brandProfile);
+
     return { success: true };
   } catch (error: any) {
     console.error('[DesignAgent] Failed to apply theme settings:', error.message);
+    // Try CSS fallback even if settings_data.json fails
+    try {
+      const theme = await getCurrentTheme();
+      if (theme) {
+        await injectCSSVariables(theme.id, brandProfile);
+        return { success: true };
+      }
+    } catch (cssError) {
+      console.error('[DesignAgent] CSS fallback also failed:', cssError);
+    }
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Inject CSS variables as fallback for themes that don't support settings_data.json
+ */
+async function injectCSSVariables(themeId: number, brandProfile: BrandProfile): Promise<void> {
+  try {
+    // Try to find existing custom CSS
+    const existingCSS = await getThemeAsset(themeId, 'assets/custom.css') ||
+                       await getThemeAsset(themeId, 'assets/theme.css') ||
+                       await getThemeAsset(themeId, 'assets/application.css');
+
+    const cssVariables = `
+/* DRACANUS AI Theme Variables - Auto-injected */
+:root {
+  --dracanus-bg-darkest: ${brandProfile.colors.background || '#0d0d0d'};
+  --dracanus-bg-dark: #131315;
+  --dracanus-bg-surface: ${brandProfile.colors.primary || '#1a1a1a'};
+  --dracanus-bg-card: #141416;
+  --dracanus-border-dark: #2a2a2e;
+  --dracanus-border-metallic: ${brandProfile.colors.secondary || '#2d2d2d'};
+  --dracanus-text-primary: ${brandProfile.colors.accent || '#ffffff'};
+  --dracanus-text-secondary: #8a8a8f;
+  --dracanus-accent-silver: #b8b8bc;
+}
+
+html, body {
+  background: var(--dracanus-bg-darkest) !important;
+  color: var(--dracanus-text-primary) !important;
+}
+`;
+
+    const cssKey = existingCSS?.key?.replace('assets/', '') || 'custom.css';
+    const finalCSS = existingCSS?.value 
+      ? `${existingCSS.value}\n\n${cssVariables}`
+      : cssVariables;
+
+    await updateThemeAsset(themeId, `assets/${cssKey}`, finalCSS);
+    console.log('[DesignAgent] ✅ CSS variables injected');
+  } catch (error: any) {
+    console.warn('[DesignAgent] Could not inject CSS variables:', error.message);
   }
 }
 

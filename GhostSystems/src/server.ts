@@ -4,9 +4,11 @@ import { startNexusListener } from './integrations/nexus/listener.js';
 import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
 import designRoutes from './cloud/routes/design.js';
+import marketingRoutes from './cloud/routes/marketing.js';
 import { startAdaptiveAIListener } from './integrations/adaptive-ai/listener.js';
 import { startDynamicPricingListener, getDynamicPricingStatus, triggerPricingOptimization } from './integrations/dynamic-pricing/listener.js';
 import { startDesignAgentListener } from './integrations/store-design-agent/listener.js';
+import { startMarketingListener } from './integrations/marketing/listener.js';
 
 // Initialize Express
 const app = express();
@@ -46,6 +48,7 @@ async function main() {
         dynamicPricing: pricingStatus.enabled ? 'active' : 'disabled',
         aiImages: process.env.ENABLE_AI_IMAGES !== 'false' ? 'active' : 'disabled',
         storeDesignAgent: process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? 'active' : 'disabled',
+        marketing: process.env.ENABLE_MARKETING_AUTOMATION === 'true' ? 'active' : 'disabled',
       },
       dynamicPricing: pricingStatus,
     });
@@ -71,10 +74,15 @@ async function main() {
   // ---------------------------------------------------------
   app.use('/api/design', designRoutes);
 
+  // ---------------------------------------------------------
+  // 2c. Marketing API Routes
+  // ---------------------------------------------------------
+  app.use('/api/marketing', express.json(), marketingRoutes);
+
   // Catch-all 404 handler for debugging
   app.use('*', (req, res) => {
     console.log(`[404] No route matched: ${req.method} ${req.originalUrl}`);
-    res.status(404).json({ error: 'Route not found', path: req.originalUrl, available: ['/', '/api/design/*', '/webhook/shopify/*'] });
+    res.status(404).json({ error: 'Route not found', path: req.originalUrl, available: ['/', '/api/design/*', '/api/marketing/*', '/webhook/shopify/*'] });
   });
 
   app.listen(PORT, () => {
@@ -146,6 +154,21 @@ async function main() {
     console.log('[INIT] ℹ️ Store Design Agent disabled (set ENABLE_STORE_DESIGN_AGENT=true to enable)');
   }
 
+  // ---------------------------------------------------------
+  // 7. Initialize Marketing Automation (Optional)
+  // SEO, email, content, social media automation
+  // ---------------------------------------------------------
+  if (process.env.ENABLE_MARKETING_AUTOMATION === 'true') {
+    try {
+      console.log('[INIT] 📢 starting Marketing Automation...');
+      startMarketingListener();
+    } catch (error) {
+      console.error('[ERROR] Failed to start Marketing Automation:', error);
+    }
+  } else {
+    console.log('[INIT] ℹ️ Marketing Automation disabled (set ENABLE_MARKETING_AUTOMATION=true to enable)');
+  }
+
   // Log feature status
   console.log('[INIT] Feature Status:');
   console.log(`  - AI Images: ${process.env.ENABLE_AI_IMAGES !== 'false' ? '✅ Enabled' : '❌ Disabled'}`);
@@ -153,6 +176,7 @@ async function main() {
   console.log(`  - Abandoned Cart: ${process.env.ENABLE_ABANDONED_CART === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Dynamic Pricing: ${process.env.ENABLE_DYNAMIC_PRICING === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Store Design Agent: ${process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Marketing Automation: ${process.env.ENABLE_MARKETING_AUTOMATION === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
 
   console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');
 }

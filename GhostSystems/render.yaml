@@ -78,6 +78,13 @@ services:
       - key: ADAPTIVE_AI_CURATION_LEVEL
         value: 'default'
         sync: false
+      # Marketing Automation
+      - key: ENABLE_MARKETING_AUTOMATION
+        value: 'true'
+        sync: false
+      - key: MARKETING_EMAIL_FROM
+        value: 'noreply@dracanus.ai'
+        sync: false
       # AI Image Generation (uses Gemini Imagen)
       - key: ENABLE_AI_IMAGES
         value: 'true'
