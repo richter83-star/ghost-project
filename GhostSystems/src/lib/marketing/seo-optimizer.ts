@@ -9,7 +9,7 @@
  * - Open Graph and Twitter Cards
  */
 
-import { getProducts, getProductById, updateProduct } from '../shopify.js';
+import { fetchProducts, getProductById, updateProduct } from '../shopify.js';
 import { generateDescription } from '../gemini.js';
 import axios from 'axios';
 
@@ -188,7 +188,7 @@ export async function optimizeAllProductsSEO(): Promise<{
   console.log('[SEO] Optimizing SEO for all products...');
 
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     let optimized = 0;
     let failed = 0;
     const errors: string[] = [];
@@ -217,7 +217,7 @@ export async function optimizeAllProductsSEO(): Promise<{
  */
 export async function generateSitemap(): Promise<string> {
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     
     const urls = products.map((product: any) => ({
       loc: `${BASE_STORE_URL}/products/${product.handle}`,

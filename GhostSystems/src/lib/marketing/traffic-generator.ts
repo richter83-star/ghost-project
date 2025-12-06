@@ -8,7 +8,7 @@
  * - Cross-selling opportunities
  */
 
-import { getProducts } from '../shopify.js';
+import { fetchProducts } from '../shopify.js';
 import { generateDescription } from '../gemini.js';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -31,7 +31,7 @@ export interface TrafficStrategy {
  */
 export async function identifyTrendingKeywords(): Promise<string[]> {
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     
     // Extract keywords from product titles and descriptions
     const keywordMap = new Map<string, number>();
@@ -116,7 +116,7 @@ export async function generateLimitedOffer(
  */
 export async function generateCrossSellStrategies(): Promise<TrafficStrategy[]> {
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     const strategies: TrafficStrategy[] = [];
 
     // Group products by category
@@ -192,7 +192,7 @@ export async function getAllTrafficStrategies(): Promise<TrafficStrategy[]> {
     strategies.push(...keywordContent);
 
     // Limited-time offers (for top products)
-    const products = await getProducts();
+    const products = await fetchProducts();
     const topProducts = products.slice(0, 3);
     for (const product of topProducts) {
       try {

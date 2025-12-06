@@ -7,7 +7,7 @@
  * - Social media posts
  */
 
-import { getProducts, getProductById } from '../shopify.js';
+import { fetchProducts, getProductById } from '../shopify.js';
 import { generateImage } from '../gemini.js';
 
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
@@ -138,7 +138,7 @@ export async function generateAllShareCards(): Promise<{
   console.log('[Social] Generating share cards for all products...');
 
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     let generated = 0;
     let failed = 0;
 

@@ -8,7 +8,7 @@
  */
 
 import { generateDescription } from '../gemini.js';
-import { getProducts } from '../shopify.js';
+import { fetchProducts } from '../shopify.js';
 
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const BASE_STORE_URL = `https://${SHOPIFY_STORE_URL.replace(/^https?:\/\//, '')}`;
@@ -150,7 +150,7 @@ Make it conversion-focused, SEO-optimized, and engaging. Format as markdown.`;
  */
 export async function generateCategoryBlogPosts(): Promise<BlogPost[]> {
   try {
-    const products = await getProducts();
+    const products = await fetchProducts();
     
     // Group products by category
     const categories = new Map<string, any[]>();
