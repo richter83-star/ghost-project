@@ -10,9 +10,7 @@
 
 import { fetchProducts } from '../shopify.js';
 import { generateDescription } from '../gemini.js';
-import { getFirestore } from 'firebase-admin/firestore';
 
-const db = getFirestore();
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const BASE_STORE_URL = `https://${SHOPIFY_STORE_URL.replace(/^https?:\/\//, '')}`;
 

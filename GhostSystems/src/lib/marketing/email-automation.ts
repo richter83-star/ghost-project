@@ -16,7 +16,10 @@ const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || process.env.MARKETING
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || '';
 const BASE_STORE_URL = `https://${SHOPIFY_STORE_URL.replace(/^https?:\/\//, '')}`;
 
-const db = getFirestore();
+// Lazy-load Firestore to avoid initialization errors
+function getDb() {
+  return getFirestore();
+}
 
 export interface EmailCampaign {
   type: 'welcome' | 'abandoned_cart' | 'product_recommendation' | 'newsletter';
@@ -243,6 +246,7 @@ export async function sendProductRecommendationEmail(
  */
 export async function trackEmailCampaign(campaign: EmailCampaign): Promise<void> {
   try {
+    const db = getDb();
     await db.collection('email_campaigns').add({
       ...campaign,
       sentAt: new Date(),
