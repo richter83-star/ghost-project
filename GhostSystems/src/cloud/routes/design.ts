@@ -32,6 +32,89 @@ router.get('/status', async (req, res) => {
 });
 
 /**
+ * Get performance metrics and reporting
+ * GET /api/design/metrics
+ */
+router.get('/metrics', async (req, res) => {
+  try {
+    const { getFirestore } = await import('firebase-admin/firestore');
+    const db = getFirestore();
+    
+    // Get all recommendations for analysis
+    const allRecs = await db.collection('store_design_recommendations')
+      .orderBy('createdAt', 'desc')
+      .limit(1000)
+      .get();
+    
+    const recommendations = allRecs.docs.map(doc => doc.data());
+    
+    // Calculate metrics
+    const total = recommendations.length;
+    const byStatus = {
+      pending: recommendations.filter((r: any) => r.status === 'pending').length,
+      approved: recommendations.filter((r: any) => r.status === 'approved').length,
+      rejected: recommendations.filter((r: any) => r.status === 'rejected').length,
+      applied: recommendations.filter((r: any) => r.status === 'applied').length,
+    };
+    
+    const byType: Record<string, number> = {};
+    const byPriority: Record<string, number> = {};
+    let totalImpact = 0;
+    let totalConfidence = 0;
+    let impactCount = 0;
+    let confidenceCount = 0;
+    
+    recommendations.forEach((rec: any) => {
+      // By type
+      const type = rec.type || 'unknown';
+      byType[type] = (byType[type] || 0) + 1;
+      
+      // By priority
+      const priority = rec.priority || 'unknown';
+      byPriority[priority] = (byPriority[priority] || 0) + 1;
+      
+      // Impact and confidence
+      if (rec.metrics?.estimatedImpact) {
+        totalImpact += rec.metrics.estimatedImpact;
+        impactCount++;
+      }
+      if (rec.metrics?.confidence) {
+        totalConfidence += rec.metrics.confidence;
+        confidenceCount++;
+      }
+    });
+    
+    const averageImpact = impactCount > 0 ? totalImpact / impactCount : 0;
+    const averageConfidence = confidenceCount > 0 ? totalConfidence / confidenceCount : 0;
+    
+    // Calculate conversion impact from results
+    const recommendationsWithResults = recommendations.filter((r: any) => r.results);
+    const totalImprovement = recommendationsWithResults.reduce((sum: number, r: any) => 
+      sum + (r.results.improvement || 0), 0
+    );
+    const averageImprovement = recommendationsWithResults.length > 0 
+      ? totalImprovement / recommendationsWithResults.length 
+      : 0;
+    
+    res.json({
+      summary: {
+        total,
+        byStatus,
+        byType,
+        byPriority,
+        averageImpact: Math.round(averageImpact * 10) / 10,
+        averageConfidence: Math.round(averageConfidence * 100) / 100,
+        averageImprovement: Math.round(averageImprovement * 10) / 10,
+        recommendationsWithResults: recommendationsWithResults.length,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Trigger a manual run of the design agent
  * POST /api/design/run
  */

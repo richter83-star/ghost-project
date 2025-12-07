@@ -42,6 +42,7 @@ export async function runDesignAgent(): Promise<{
   error?: string;
 }> {
   console.log('[DesignAgent] 🚀 Starting design agent run...');
+  lastRunTime = new Date();
 
   try {
     // 0. Analyze brand and apply theme settings automatically
@@ -78,7 +79,25 @@ export async function runDesignAgent(): Promise<{
 
     // 2. Generate recommendations based on analytics
     const minConfidence = parseFloat(process.env.DESIGN_AGENT_MIN_CONFIDENCE || '0.7');
+    const autoApply = process.env.DESIGN_AGENT_AUTO_APPLY === 'true';
+    const maxDailyChanges = parseInt(process.env.DESIGN_AGENT_MAX_DAILY_CHANGES || '5', 10);
+    
     const recommendations = await generateRecommendations(analytics, minConfidence);
+    
+    // Prioritize recommendations by impact and confidence
+    const prioritized = recommendations.sort((a, b) => {
+      // High priority first
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+        return priorityOrder[a.priority] - priorityOrder[b.priority];
+      }
+      // Then by estimated impact
+      if (a.metrics.estimatedImpact !== b.metrics.estimatedImpact) {
+        return b.metrics.estimatedImpact - a.metrics.estimatedImpact;
+      }
+      // Finally by confidence
+      return b.metrics.confidence - a.metrics.confidence;
+    });
 
     if (recommendations.length === 0) {
       console.log('[DesignAgent] No recommendations generated (all filtered or none needed)');
@@ -88,8 +107,14 @@ export async function runDesignAgent(): Promise<{
     // 3. Save recommendations to Firebase
     const savedIds = await saveRecommendations(recommendations);
 
-    // 4. Send email notification
-    await sendRecommendationEmail(recommendations);
+    // 5. Send email notification (only for non-auto-applied recommendations)
+    if (recommendationsToSave.length > 0) {
+      await sendRecommendationEmail(recommendationsToSave);
+    }
+    
+    if (autoApplied > 0) {
+      console.log(`[DesignAgent] 🤖 Auto-applied ${autoApplied} high-confidence recommendations`);
+    }
 
     // 5. Auto-generate images for products with placeholders
     const autoGenerateImages = process.env.DESIGN_AGENT_AUTO_GENERATE_IMAGES !== 'false'; // Default: true
@@ -260,27 +285,122 @@ export async function processRevert(
   return revertChange(backupId);
 }
 
+// Track last run time
+let lastRunTime: Date | null = null;
+
 /**
  * Get agent status and statistics
  */
 export async function getAgentStatus(): Promise<{
   enabled: boolean;
-  lastRun: Date | null;
-  stats: {
-    pending: number;
-    approved: number;
-    applied: number;
-    rejected: number;
-    avgImpact: number;
-  };
+  lastRun: string | null;
+  totalRecommendations: number;
+  pendingRecommendations: number;
+  approvedRecommendations: number;
+  rejectedRecommendations: number;
+  appliedRecommendations: number;
+  successRate: number;
+  averageConfidence: number;
+  topRecommendationTypes: Array<{ type: string; count: number; approvalRate: number }>;
+  recentActivity: Array<{ date: string; action: string; count: number }>;
 }> {
   const enabled = process.env.ENABLE_STORE_DESIGN_AGENT === 'true';
+  
+  const pending = await getPendingRecommendations();
   const stats = await getRecommendationStats();
-
+  
+  // Calculate success rate
+  const totalDecisions = stats.approved + stats.rejected;
+  const successRate = totalDecisions > 0 ? (stats.approved / totalDecisions) * 100 : 0;
+  
+  // Get recommendation type breakdown
+  const { getFirestore } = await import('firebase-admin/firestore');
+  const db = getFirestore();
+  const allRecs = await db.collection('store_design_recommendations')
+    .limit(100)
+    .get();
+  
+  const typeStats: Record<string, { count: number; approved: number; rejected: number }> = {};
+  let totalConfidence = 0;
+  let confidenceCount = 0;
+  
+  allRecs.docs.forEach(doc => {
+    const rec = doc.data() as DesignRecommendation;
+    const type = rec.type;
+    
+    if (!typeStats[type]) {
+      typeStats[type] = { count: 0, approved: 0, rejected: 0 };
+    }
+    
+    typeStats[type].count++;
+    if (rec.status === 'approved') typeStats[type].approved++;
+    if (rec.status === 'rejected') typeStats[type].rejected++;
+    
+    if (rec.metrics?.confidence) {
+      totalConfidence += rec.metrics.confidence;
+      confidenceCount++;
+    }
+  });
+  
+  const topRecommendationTypes = Object.entries(typeStats)
+    .map(([type, stats]) => ({
+      type,
+      count: stats.count,
+      approvalRate: (stats.approved + stats.rejected) > 0 
+        ? (stats.approved / (stats.approved + stats.rejected)) * 100 
+        : 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  
+  const averageConfidence = confidenceCount > 0 ? (totalConfidence / confidenceCount) * 100 : 0;
+  
+  // Get recent activity (last 7 days)
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  const recentRecs = await db.collection('store_design_recommendations')
+    .where('createdAt', '>=', sevenDaysAgo)
+    .get();
+  
+  const activityByDate: Record<string, { approved: number; rejected: number; applied: number }> = {};
+  recentRecs.docs.forEach(doc => {
+    const rec = doc.data() as DesignRecommendation;
+    const date = rec.createdAt?.toDate?.()?.toISOString().split('T')[0] || 
+                 (rec.createdAt instanceof Date ? rec.createdAt.toISOString().split('T')[0] : '');
+    
+    if (!date) return;
+    
+    if (!activityByDate[date]) {
+      activityByDate[date] = { approved: 0, rejected: 0, applied: 0 };
+    }
+    
+    if (rec.status === 'approved') activityByDate[date].approved++;
+    if (rec.status === 'rejected') activityByDate[date].rejected++;
+    if (rec.status === 'applied') activityByDate[date].applied++;
+  });
+  
+  const recentActivity = Object.entries(activityByDate)
+    .map(([date, counts]) => ({
+      date,
+      action: 'recommendations',
+      count: counts.approved + counts.rejected + counts.applied,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 7);
+  
   return {
     enabled,
-    lastRun: null, // TODO: Track last run time
-    stats,
+    lastRun: lastRunTime?.toISOString() || null,
+    totalRecommendations: stats.total,
+    pendingRecommendations: pending.length,
+    approvedRecommendations: stats.approved,
+    rejectedRecommendations: stats.rejected,
+    appliedRecommendations: stats.applied,
+    successRate: Math.round(successRate * 10) / 10,
+    averageConfidence: Math.round(averageConfidence * 10) / 10,
+    topRecommendationTypes,
+    recentActivity,
   };
 }
 

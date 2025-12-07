@@ -10,9 +10,9 @@
 import 'dotenv/config';
 import axios from 'axios';
 import { decode } from 'html-entities';
-import { fetchProducts } from '../lib/shopify.js';
+import { fetchProducts, deleteProductImage, replaceProductImages } from '../lib/shopify.js';
 import { getBestPlaceholderImage } from '../lib/image-placeholder.js';
-import { generateDescription } from '../lib/gemini.js';
+import { generateDescription, generateProductImage } from '../lib/gemini.js';
 import { getBestCategory } from '../lib/category-mapper.js';
 import { Readable } from 'stream';
 
@@ -40,6 +40,29 @@ function hashString(str: string): number {
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash) % 1000;
+}
+
+/**
+ * Check if an image URL is a placeholder/nature scene
+ */
+function isPlaceholderImage(imageSrc: string | null | undefined): boolean {
+  if (!imageSrc) return true;
+  const src = imageSrc.toLowerCase();
+  return (
+    src.includes('picsum') || 
+    src.includes('placeholder') || 
+    src.includes('unsplash') ||
+    src.includes('lorem') ||
+    src.includes('nature') ||
+    src.includes('seed=') ||
+    src.includes('random') ||
+    src.includes('placeholder.com') ||
+    src.includes('via.placeholder') ||
+    src.includes('source.unsplash') ||
+    src.match(/\/\d+\/\d+/) || // Pattern like /800/800 (picsum)
+    src.includes('no-image') ||
+    src.includes('gift-card')
+  );
 }
 
 /**
@@ -314,29 +337,83 @@ async function main() {
       }
 
       // Check and fix images
-      if (!product.images || product.images.length === 0) {
-        console.log(`  ⚠️  No images found, adding placeholder...`);
+      const hasImages = product.images && product.images.length > 0;
+      const hasPlaceholderImages = hasImages && product.images.some((img: any) => 
+        isPlaceholderImage(img.src)
+      );
+      
+      if (!hasImages || hasPlaceholderImages) {
+        if (hasPlaceholderImages) {
+          console.log(`  ⚠️  Found placeholder/nature scene images, replacing...`);
+          // Delete existing placeholder images
+          for (const image of product.images) {
+            if (isPlaceholderImage(image.src)) {
+              try {
+                console.log(`  🗑️  Deleting placeholder image: ${image.src.substring(0, 50)}...`);
+                await deleteProductImage(product.id, String(image.id));
+                await new Promise(resolve => setTimeout(resolve, 300)); // Small delay between deletions
+              } catch (error: any) {
+                console.warn(`  ⚠️  Could not delete image ${image.id}:`, error.message);
+              }
+            }
+          }
+        } else {
+          console.log(`  ⚠️  No images found, adding...`);
+        }
+        
         let imageAdded = false;
         let attempts = 0;
-        const maxAttempts = 3;
+        const maxAttempts = 4;
         
-        // Try multiple placeholder services if one fails
-        const placeholderServices = [
-          () => getBestPlaceholderImage(product.title, product.product_type || 'digital'),
-          () => `https://picsum.photos/seed/${hashString(product.title)}/800/800`,
-          () => `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=800&fit=crop`,
-        ];
-        
+        // Try AI image generation first, then fall back to placeholders
         while (!imageAdded && attempts < maxAttempts) {
           try {
-            const placeholderUrl = placeholderServices[attempts]();
-            console.log(`  📷 Attempt ${attempts + 1}/${maxAttempts}: Adding image...`);
-            await addProductImage(product.id, placeholderUrl);
-            console.log(`  ✅ Successfully added image`);
-            addedImages++;
-            imageAdded = true;
-            // Wait a bit to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (attempts === 0) {
+              // Try AI-generated image first
+              console.log(`  🎨 Attempt 1: Trying AI-generated image...`);
+              try {
+                const aiImageResult = await generateProductImage(
+                  product.title,
+                  product.product_type || 'digital'
+                );
+                
+                if (aiImageResult.base64 && aiImageResult.source === 'ai') {
+                  // Use AI-generated image
+                  await replaceProductImages(String(product.id), aiImageResult.base64, false);
+                  console.log(`  ✅ Successfully added AI-generated image`);
+                  addedImages++;
+                  imageAdded = true;
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  break;
+                } else {
+                  console.log(`  ⚠️  AI image generation not available, trying placeholders...`);
+                  attempts++;
+                }
+              } catch (aiError: any) {
+                console.log(`  ⚠️  AI image generation failed: ${aiError.message}, trying placeholders...`);
+                attempts++;
+              }
+            } else {
+              // Fall back to placeholder images
+              const placeholderServices = [
+                () => getBestPlaceholderImage(product.title, product.product_type || 'digital'),
+                () => `https://picsum.photos/seed/${hashString(product.title)}/800/800`,
+                () => `https://images.unsplash.com/photo-${Math.floor(Math.random() * 1000000)}?w=800&h=800&fit=crop`,
+              ];
+              
+              const placeholderIndex = attempts - 1;
+              if (placeholderIndex < placeholderServices.length) {
+                const placeholderUrl = placeholderServices[placeholderIndex]();
+                console.log(`  📷 Attempt ${attempts + 1}/${maxAttempts}: Adding placeholder image...`);
+                await addProductImage(product.id, placeholderUrl);
+                console.log(`  ✅ Successfully added placeholder image`);
+                addedImages++;
+                imageAdded = true;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              } else {
+                attempts++;
+              }
+            }
           } catch (error: any) {
             attempts++;
             console.error(`  ❌ Attempt ${attempts} failed:`, error.message);
@@ -352,7 +429,7 @@ async function main() {
           }
         }
       } else {
-        console.log(`  ✅ Has ${product.images.length} image(s)`);
+        console.log(`  ✅ Has ${product.images.length} valid image(s)`);
       }
     }
 

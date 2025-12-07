@@ -87,12 +87,13 @@ ADAPTIVE_AI_MIN_PRODUCTS=3                 # Minimum products per cycle
 ADAPTIVE_AI_MAX_PRODUCTS=5                 # Maximum products per cycle
 ENABLE_ADAPTIVE_AI=false                   # Enable automatic generation in server
 
-# Required for analytics
+# Required for analytics (sales data integration)
 SHOPIFY_STORE_URL=dracanus-ai.myshopify.com
 SHOPIFY_ADMIN_API_TOKEN=shpat_xxxxx
-GUMROAD_API_KEY=xxxxx                      # Optional, for Gumroad sales
-LEMON_API_KEY=xxxxx                        # Optional, for Lemon sales
-GEMINI_API_KEY=xxxxx                       # Required for AI descriptions
+GUMROAD_API_KEY=xxxxx                      # Optional, for Gumroad sales analysis
+LEMONSQUEEZY_API_KEY=xxxxx                 # Optional, for Lemon Squeezy sales analysis
+LEMONSQUEEZY_STORE_ID=xxxxx                # Optional, required if using Lemon Squeezy
+GEMINI_API_KEY=xxxxx                       # Required for AI-generated descriptions
 ```
 
 ## How It Works

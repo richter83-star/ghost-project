@@ -284,9 +284,64 @@ async function applyCollectionChange(
   const action = changes.action as string;
 
   if (action === 'generate_collection_descriptions') {
-    // TODO: Implement collection description generation
-    console.log('[DesignAgent] Collection description generation not yet implemented');
-    return { success: true };
+    try {
+      const { getCollections, updateCollection } = await import('../shopify.js');
+      const collections = await getCollections();
+      
+      // Filter collections that need descriptions (missing or too short)
+      const collectionsNeedingDescriptions = collections.filter((collection: any) => {
+        const currentDesc = stripHtml(collection.body_html || collection.description || '');
+        return !currentDesc || currentDesc.length < 100;
+      });
+
+      if (collectionsNeedingDescriptions.length === 0) {
+        console.log('[DesignAgent] All collections already have descriptions');
+        return { success: true };
+      }
+
+      console.log(`[DesignAgent] Generating descriptions for ${collectionsNeedingDescriptions.length} collections`);
+
+      let updated = 0;
+      for (const collection of collectionsNeedingDescriptions) {
+        try {
+          // Generate AI description for collection
+          const collectionTitle = collection.title || 'Collection';
+          const productCount = collection.products_count || 0;
+          
+          const description = await generateCopy(
+            'collection_description',
+            {
+              collection_title: collectionTitle,
+              product_count: productCount,
+              collection_type: collection.sort_order ? 'smart' : 'custom',
+            }
+          );
+
+          if (description && description.length >= 100) {
+            // Update collection with new description
+            await updateCollection(collection.id, {
+              body_html: `<p>${description.replace(/\n/g, '</p><p>')}</p>`,
+            });
+            
+            updated++;
+            console.log(`[DesignAgent] ✅ Generated description for collection: ${collectionTitle}`);
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            console.warn(`[DesignAgent] ⚠️ Generated description too short for: ${collectionTitle}`);
+          }
+        } catch (error: any) {
+          console.error(`[DesignAgent] ❌ Failed to generate description for collection ${collection.id}:`, error.message);
+        }
+      }
+
+      console.log(`[DesignAgent] ✅ Updated ${updated} collection descriptions`);
+      return { success: true };
+    } catch (error: any) {
+      console.error('[DesignAgent] Failed to generate collection descriptions:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 
   return { success: false, error: 'Unknown collection action' };
@@ -298,9 +353,182 @@ async function applyCollectionChange(
 async function applyMetafieldChange(
   recommendation: DesignRecommendation
 ): Promise<{ success: boolean; backupId?: string; error?: string }> {
-  // TODO: Implement metafield changes
-  console.log('[DesignAgent] Metafield changes not yet implemented');
-  return { success: true };
+  const { target, changes } = recommendation.implementation;
+  const action = changes.action as string;
+  const metafieldData = changes.metafield as {
+    namespace: string;
+    key: string;
+    value: string;
+    type: string;
+  };
+
+  if (!metafieldData) {
+    return { success: false, error: 'Metafield data is required' };
+  }
+
+  try {
+    const axios = (await import('axios')).default;
+    const BASE_URL = `https://${process.env.SHOPIFY_STORE_URL?.replace(/^https?:\/\//, '').replace(/\/$/, '')}/admin/api/${process.env.SHOPIFY_API_VERSION || '2025-01'}`;
+    
+    function getHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_API_TOKEN || '',
+      };
+    }
+
+    // Determine target type (product, collection, or store)
+    const targetType = target.includes('product') ? 'product' : 
+                      target.includes('collection') ? 'collection' : 
+                      'store';
+
+    if (targetType === 'product') {
+      // Extract product ID from target
+      const productId = target.replace('product:', '').trim();
+      
+      if (!productId || !/^\d+$/.test(productId)) {
+        return { success: false, error: 'Invalid product ID' };
+      }
+
+      // Check if metafield exists
+      const existingMetafield = await axios.get(
+        `${BASE_URL}/products/${productId}/metafields.json?namespace=${encodeURIComponent(metafieldData.namespace)}&key=${encodeURIComponent(metafieldData.key)}`,
+        { headers: getHeaders() }
+      ).catch(() => ({ data: { metafields: [] } }));
+
+      const metafields = existingMetafield.data?.metafields || [];
+      const existing = metafields.find((mf: any) => 
+        mf.namespace === metafieldData.namespace && mf.key === metafieldData.key
+      );
+
+      if (existing) {
+        // Update existing metafield
+        await axios.put(
+          `${BASE_URL}/metafields/${existing.id}.json`,
+          {
+            metafield: {
+              id: existing.id,
+              value: metafieldData.value,
+              type: metafieldData.type || existing.type,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Updated metafield ${metafieldData.namespace}.${metafieldData.key} for product ${productId}`);
+      } else {
+        // Create new metafield
+        await axios.post(
+          `${BASE_URL}/products/${productId}/metafields.json`,
+          {
+            metafield: {
+              namespace: metafieldData.namespace,
+              key: metafieldData.key,
+              value: metafieldData.value,
+              type: metafieldData.type || 'single_line_text_field',
+              owner_resource: 'product',
+              owner_id: productId,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Created metafield ${metafieldData.namespace}.${metafieldData.key} for product ${productId}`);
+      }
+    } else if (targetType === 'collection') {
+      const collectionId = target.replace('collection:', '').trim();
+      
+      if (!collectionId || !/^\d+$/.test(collectionId)) {
+        return { success: false, error: 'Invalid collection ID' };
+      }
+
+      // Check if metafield exists
+      const existingMetafield = await axios.get(
+        `${BASE_URL}/collections/${collectionId}/metafields.json?namespace=${encodeURIComponent(metafieldData.namespace)}&key=${encodeURIComponent(metafieldData.key)}`,
+        { headers: getHeaders() }
+      ).catch(() => ({ data: { metafields: [] } }));
+
+      const metafields = existingMetafield.data?.metafields || [];
+      const existing = metafields.find((mf: any) => 
+        mf.namespace === metafieldData.namespace && mf.key === metafieldData.key
+      );
+
+      if (existing) {
+        await axios.put(
+          `${BASE_URL}/metafields/${existing.id}.json`,
+          {
+            metafield: {
+              id: existing.id,
+              value: metafieldData.value,
+              type: metafieldData.type || existing.type,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Updated metafield ${metafieldData.namespace}.${metafieldData.key} for collection ${collectionId}`);
+      } else {
+        await axios.post(
+          `${BASE_URL}/collections/${collectionId}/metafields.json`,
+          {
+            metafield: {
+              namespace: metafieldData.namespace,
+              key: metafieldData.key,
+              value: metafieldData.value,
+              type: metafieldData.type || 'single_line_text_field',
+              owner_resource: 'collection',
+              owner_id: collectionId,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Created metafield ${metafieldData.namespace}.${metafieldData.key} for collection ${collectionId}`);
+      }
+    } else {
+      // Store-level metafield
+      const existingMetafield = await axios.get(
+        `${BASE_URL}/metafields.json?namespace=${encodeURIComponent(metafieldData.namespace)}&key=${encodeURIComponent(metafieldData.key)}&owner_resource=shop`,
+        { headers: getHeaders() }
+      ).catch(() => ({ data: { metafields: [] } }));
+
+      const metafields = existingMetafield.data?.metafields || [];
+      const existing = metafields.find((mf: any) => 
+        mf.namespace === metafieldData.namespace && mf.key === metafieldData.key
+      );
+
+      if (existing) {
+        await axios.put(
+          `${BASE_URL}/metafields/${existing.id}.json`,
+          {
+            metafield: {
+              id: existing.id,
+              value: metafieldData.value,
+              type: metafieldData.type || existing.type,
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Updated store metafield ${metafieldData.namespace}.${metafieldData.key}`);
+      } else {
+        await axios.post(
+          `${BASE_URL}/metafields.json`,
+          {
+            metafield: {
+              namespace: metafieldData.namespace,
+              key: metafieldData.key,
+              value: metafieldData.value,
+              type: metafieldData.type || 'single_line_text_field',
+              owner_resource: 'shop',
+            },
+          },
+          { headers: getHeaders() }
+        );
+        console.log(`[DesignAgent] ✅ Created store metafield ${metafieldData.namespace}.${metafieldData.key}`);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('[DesignAgent] Failed to apply metafield change:', error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 /**

@@ -7,6 +7,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
+import { getFirestore } from 'firebase-admin/firestore';
 import {
   DesignRecommendation,
   StoreAnalytics,
@@ -75,8 +76,11 @@ export async function generateRecommendations(
   const aiRecommendations = await generateAIRecommendations(analytics, brandProfile);
   recommendations.push(...aiRecommendations);
 
+  // Apply learning from past approvals/rejections
+  const learnedRecommendations = await applyLearningToRecommendations(recommendations);
+
   // Filter by confidence threshold
-  const filtered = recommendations.filter(r => r.metrics.confidence >= minConfidence);
+  const filtered = learnedRecommendations.filter(r => r.metrics.confidence >= minConfidence);
   
   // Sort by priority and confidence
   filtered.sort((a, b) => {
@@ -414,15 +418,149 @@ Focus on actionable, high-impact changes that match the brand identity. Be speci
 }
 
 /**
+ * Apply learning from past approvals/rejections to adjust recommendation confidence
+ */
+async function applyLearningToRecommendations(
+  recommendations: DesignRecommendation[]
+): Promise<DesignRecommendation[]> {
+  const db = getFirestore();
+  
+  try {
+    // Get learning data from Firestore
+    const learningDoc = await db.collection('design_agent_learning').doc('patterns').get();
+    if (!learningDoc.exists) {
+      // No learning data yet, return recommendations as-is
+      return recommendations;
+    }
+
+    const learningData = learningDoc.data();
+    const approvalRates = learningData?.approvalRates || {}; // { type: approvalRate }
+    const rejectionReasons = learningData?.rejectionReasons || {}; // { type: [reasons] }
+    const typePreferences = learningData?.typePreferences || {}; // { type: preferenceScore }
+
+    // Adjust confidence based on historical approval rates
+    return recommendations.map(rec => {
+      const type = rec.type;
+      const approvalRate = approvalRates[type] || 0.5; // Default 50% if unknown
+      const preferenceScore = typePreferences[type] || 1.0; // Default neutral
+
+      // Adjust confidence: if this type is often approved, increase confidence
+      // If often rejected, decrease confidence
+      const confidenceAdjustment = (approvalRate - 0.5) * 0.3; // Max ±15% adjustment
+      const preferenceAdjustment = (preferenceScore - 1.0) * 0.2; // Max ±10% adjustment
+      
+      const adjustedConfidence = Math.max(0.1, Math.min(0.99, 
+        rec.metrics.confidence + confidenceAdjustment + preferenceAdjustment
+      ));
+
+      return {
+        ...rec,
+        metrics: {
+          ...rec.metrics,
+          confidence: adjustedConfidence,
+          basedOn: [...rec.metrics.basedOn, 'historical_learning'],
+        },
+      };
+    });
+  } catch (error: any) {
+    console.warn('[DesignAgent] Failed to apply learning:', error.message);
+    return recommendations; // Return original if learning fails
+  }
+}
+
+/**
+ * Record approval/rejection for learning
+ */
+export async function recordRecommendationDecision(
+  recommendationId: string,
+  decision: 'approved' | 'rejected',
+  reason?: string
+): Promise<void> {
+  const db = getFirestore();
+  
+  try {
+    // Get the recommendation to learn from its type
+    const recDoc = await db.collection('store_design_recommendations').doc(recommendationId).get();
+    if (!recDoc.exists) {
+      return;
+    }
+
+    const rec = recDoc.data() as DesignRecommendation;
+    const type = rec.type;
+
+    // Update learning data
+    const learningRef = db.collection('design_agent_learning').doc('patterns');
+    const learningDoc = await learningRef.get();
+
+    const currentData = learningDoc.exists ? learningDoc.data() : {
+      approvalRates: {},
+      rejectionReasons: {},
+      typePreferences: {},
+      totalDecisions: 0,
+    };
+
+    // Update approval rates
+    const approvalRates = currentData.approvalRates || {};
+    const typeStats = approvalRates[type] || { approved: 0, rejected: 0 };
+    
+    if (decision === 'approved') {
+      typeStats.approved++;
+    } else {
+      typeStats.rejected++;
+    }
+    
+    approvalRates[type] = typeStats;
+    const approvalRate = typeStats.approved / (typeStats.approved + typeStats.rejected);
+
+    // Update rejection reasons
+    if (decision === 'rejected' && reason) {
+      const rejectionReasons = currentData.rejectionReasons || {};
+      if (!rejectionReasons[type]) {
+        rejectionReasons[type] = [];
+      }
+      rejectionReasons[type].push(reason);
+      // Keep only last 10 reasons per type
+      if (rejectionReasons[type].length > 10) {
+        rejectionReasons[type] = rejectionReasons[type].slice(-10);
+      }
+    }
+
+    // Update type preferences (higher = more preferred)
+    const typePreferences = currentData.typePreferences || {};
+    if (decision === 'approved') {
+      typePreferences[type] = (typePreferences[type] || 1.0) + 0.1; // Increase preference
+    } else {
+      typePreferences[type] = Math.max(0.5, (typePreferences[type] || 1.0) - 0.1); // Decrease preference
+    }
+
+    // Save updated learning data
+    await learningRef.set({
+      approvalRates,
+      rejectionReasons,
+      typePreferences,
+      totalDecisions: (currentData.totalDecisions || 0) + 1,
+      lastUpdated: new Date().toISOString(),
+    }, { merge: true });
+
+    console.log(`[DesignAgent] 📚 Recorded ${decision} for ${type} (approval rate: ${(approvalRate * 100).toFixed(1)}%)`);
+  } catch (error: any) {
+    console.error('[DesignAgent] Failed to record decision:', error.message);
+  }
+}
+
+/**
  * Generate copy/text content using AI
  */
 export async function generateCopy(
   type: 'meta_description' | 'product_description' | 'collection_description',
   context: {
-    title: string;
+    title?: string;
     productType?: string;
     existingContent?: string;
     keywords?: string[];
+    collection_title?: string;
+    product_count?: number;
+    collection_type?: string;
   }
 ): Promise<string | null> {
   if (!process.env.GEMINI_API_KEY) {
@@ -454,11 +592,19 @@ The description should:
 
 Return the description in HTML format with <p> tags.`,
 
-      collection_description: `Write a brief collection description (50-100 words) for:
-Collection: ${context.title}
+      collection_description: `Write a compelling collection description (150-250 words) for this product collection:
+Collection Title: ${context.collection_title || 'Collection'}
+Product Count: ${context.product_count || 0} products
+Collection Type: ${context.collection_type || 'custom'}
 
-The description should explain what products are in this collection and why customers should browse it.
-Return ONLY the description text.`,
+The description should:
+- Explain what products are in this collection
+- Highlight the value and benefits of shopping this collection
+- Use SEO-friendly language with relevant keywords
+- Be engaging and encourage browsing
+- Be professional and sales-focused
+
+Return ONLY the description text, nothing else.`,
     };
 
     const result = await model.generateContent(prompts[type]);

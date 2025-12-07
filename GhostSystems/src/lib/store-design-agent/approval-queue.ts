@@ -175,14 +175,38 @@ export async function updateRecommendationStatus(
  * Approve a recommendation
  */
 export async function approveRecommendation(id: string): Promise<boolean> {
-  return updateRecommendationStatus(id, 'approved');
+  const result = await updateRecommendationStatus(id, 'approved');
+  
+  // Record approval for learning
+  if (result) {
+    try {
+      const { recordRecommendationDecision } = await import('./designer.js');
+      await recordRecommendationDecision(id, 'approved');
+    } catch (error: any) {
+      console.warn('[DesignAgent] Failed to record approval for learning:', error.message);
+    }
+  }
+  
+  return result;
 }
 
 /**
  * Reject a recommendation
  */
 export async function rejectRecommendation(id: string, reason?: string): Promise<boolean> {
-  return updateRecommendationStatus(id, 'rejected', { rejectionReason: reason });
+  const result = await updateRecommendationStatus(id, 'rejected', { rejectionReason: reason });
+  
+  // Record rejection for learning
+  if (result) {
+    try {
+      const { recordRecommendationDecision } = await import('./designer.js');
+      await recordRecommendationDecision(id, 'rejected', reason);
+    } catch (error: any) {
+      console.warn('[DesignAgent] Failed to record rejection for learning:', error.message);
+    }
+  }
+  
+  return result;
 }
 
 /**

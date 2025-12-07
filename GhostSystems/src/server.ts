@@ -5,10 +5,13 @@ import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
 import designRoutes from './cloud/routes/design.js';
 import marketingRoutes from './cloud/routes/marketing.js';
+import marketingAgentRoutes from './cloud/routes/marketing-agent.js';
+import dashboardRoutes from './cloud/routes/dashboard.js';
 import { startAdaptiveAIListener } from './integrations/adaptive-ai/listener.js';
 import { startDynamicPricingListener, getDynamicPricingStatus, triggerPricingOptimization } from './integrations/dynamic-pricing/listener.js';
 import { startDesignAgentListener } from './integrations/store-design-agent/listener.js';
 import { startMarketingListener } from './integrations/marketing/listener.js';
+import { startMarketingAgentListener } from './integrations/marketing-agent/listener.js';
 
 // Initialize Express
 const app = express();
@@ -49,6 +52,7 @@ async function main() {
         aiImages: process.env.ENABLE_AI_IMAGES !== 'false' ? 'active' : 'disabled',
         storeDesignAgent: process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? 'active' : 'disabled',
         marketing: process.env.ENABLE_MARKETING_AUTOMATION === 'true' ? 'active' : 'disabled',
+        marketingAgent: process.env.ENABLE_MARKETING_AGENT === 'true' ? 'active' : 'disabled',
       },
       dynamicPricing: pricingStatus,
     });
@@ -61,6 +65,17 @@ async function main() {
     
     const result = await triggerPricingOptimization(dryRun);
     res.json(result);
+  });
+
+  // API endpoint to get Adaptive AI monitoring stats
+  app.get('/api/adaptive-ai/status', async (req, res) => {
+    try {
+      const { getAdaptiveAIMonitoring } = await import('./integrations/adaptive-ai/listener.js');
+      const stats = getAdaptiveAIMonitoring();
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // ---------------------------------------------------------
@@ -79,10 +94,32 @@ async function main() {
   // ---------------------------------------------------------
   app.use('/api/marketing', express.json(), marketingRoutes);
 
+  // ---------------------------------------------------------
+  // 2d. Marketing Agent API Routes
+  // ---------------------------------------------------------
+  app.use('/api/marketing-agent', express.json(), marketingAgentRoutes);
+
+  // ---------------------------------------------------------
+  // 2e. Dashboard API Routes
+  // ---------------------------------------------------------
+  app.use('/api/dashboard', express.json(), dashboardRoutes);
+
+  // ---------------------------------------------------------
+  // 2f. Dashboard Frontend (serve static files)
+  // ---------------------------------------------------------
+  try {
+    const path = await import('path');
+    const dashboardPath = path.default.join(process.cwd(), 'dashboard', 'dist');
+    app.use('/dashboard', express.static(dashboardPath));
+    console.log('[INIT] ✅ Dashboard static files configured');
+  } catch (error: any) {
+    console.log('[INIT] ⚠️ Dashboard not built yet. Run "npm run build" in dashboard/ directory');
+  }
+
   // Catch-all 404 handler for debugging
   app.use('*', (req, res) => {
     console.log(`[404] No route matched: ${req.method} ${req.originalUrl}`);
-    res.status(404).json({ error: 'Route not found', path: req.originalUrl, available: ['/', '/api/design/*', '/api/marketing/*', '/webhook/shopify/*'] });
+    res.status(404).json({ error: 'Route not found', path: req.originalUrl, available: ['/', '/api/design/*', '/api/marketing/*', '/api/marketing-agent/*', '/api/dashboard/*', '/dashboard', '/webhook/shopify/*'] });
   });
 
   app.listen(PORT, () => {
@@ -116,7 +153,11 @@ async function main() {
   if (process.env.ENABLE_ADAPTIVE_AI === 'true') {
     try {
       console.log('[INIT] 🧠 starting Adaptive AI Listener...');
+      const { startAdaptiveAIListener } = await import('./integrations/adaptive-ai/listener.js');
       startAdaptiveAIListener();
+      console.log('[INIT] ✅ Adaptive AI Listener started successfully');
+      console.log(`[INIT]    - Generation interval: ${process.env.ADAPTIVE_AI_GENERATION_INTERVAL_HOURS || '24'} hours`);
+      console.log(`[INIT]    - Products per cycle: ${process.env.ADAPTIVE_AI_MIN_PRODUCTS || '3'}-${process.env.ADAPTIVE_AI_MAX_PRODUCTS || '5'}`);
     } catch (error) {
       console.error('[ERROR] Failed to start Adaptive AI listener:', error);
     }
@@ -169,6 +210,21 @@ async function main() {
     console.log('[INIT] ℹ️ Marketing Automation disabled (set ENABLE_MARKETING_AUTOMATION=true to enable)');
   }
 
+  // ---------------------------------------------------------
+  // 8. Initialize Marketing Agent (Optional)
+  // Autonomous AI marketing strategy recommendations and execution
+  // ---------------------------------------------------------
+  if (process.env.ENABLE_MARKETING_AGENT === 'true') {
+    try {
+      console.log('[INIT] 🎯 starting Marketing Agent...');
+      startMarketingAgentListener();
+    } catch (error) {
+      console.error('[ERROR] Failed to start Marketing Agent:', error);
+    }
+  } else {
+    console.log('[INIT] ℹ️ Marketing Agent disabled (set ENABLE_MARKETING_AGENT=true to enable)');
+  }
+
   // Log feature status
   console.log('[INIT] Feature Status:');
   console.log(`  - AI Images: ${process.env.ENABLE_AI_IMAGES !== 'false' ? '✅ Enabled' : '❌ Disabled'}`);
@@ -177,6 +233,7 @@ async function main() {
   console.log(`  - Dynamic Pricing: ${process.env.ENABLE_DYNAMIC_PRICING === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Store Design Agent: ${process.env.ENABLE_STORE_DESIGN_AGENT === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
   console.log(`  - Marketing Automation: ${process.env.ENABLE_MARKETING_AUTOMATION === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
+  console.log(`  - Marketing Agent: ${process.env.ENABLE_MARKETING_AGENT === 'true' ? '✅ Enabled' : '❌ Disabled'}`);
 
   console.log('[SYSTEM] 👻 Ghost is fully operational and waiting for jobs.');
 }
