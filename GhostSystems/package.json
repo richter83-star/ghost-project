@@ -17,6 +17,7 @@
         "fix:archived": "tsx src/cli/fix-archived-products.ts",
         "fix:shopify": "node run-fix.mjs",
         "verify:images": "tsx src/cli/verify-product-images.ts",
+    "process:drafts": "tsx src/integrations/nexus/worker.ts",
     "regenerate:images": "tsx src/cli/regenerate-images.ts",
     "verify:products": "tsx src/cli/verify-products.ts",
     "test:image-replacement": "node test-image-replacement.mjs",
