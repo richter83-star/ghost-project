@@ -1,59 +1,18 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-
-let db: FirebaseFirestore.Firestore | null = null;
-
-/**
- * Initialize Firebase Admin using FIREBASE_SERVICE_ACCOUNT_JSON env var.
- */
-function initAdmin() {
-  if (db) return; // already initialized
-
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-
-  if (!serviceAccountJson) {
-    console.error(
-      '[GhostSystems] ❌ FIREBASE_SERVICE_ACCOUNT_JSON missing. Nexus listener will NOT run.'
-    );
-    return;
-  }
-
-  try {
-    const serviceAccount = JSON.parse(serviceAccountJson);
-
-    if (!getApps().length) {
-      initializeApp({
-        credential: cert(serviceAccount as any),
-      });
-    }
-
-    db = getFirestore();
-    console.log('[GhostSystems] ✅ Firebase Admin initialized for Nexus.');
-  } catch (err) {
-    console.error(
-      '[GhostSystems] ❌ Failed to initialize Firebase Admin from FIREBASE_SERVICE_ACCOUNT_JSON:',
-      err
-    );
-  }
-}
+import { db, FieldValue } from '../../firebase.js';
+import config from '../../config.js';
 
 /**
  * Listen for products with status === "pending" and move them to "draft".
  */
 export function startNexusListener() {
-  initAdmin();
-
   if (!db) {
-    console.error(
-      '[GhostSystems] ❌ Firestore not initialized. Aborting Nexus listener.'
-    );
+    console.error('[GhostSystems][NexusListener] Firestore not initialized. Aborting listener.');
     return;
   }
 
-  const collectionName = process.env.FIRESTORE_JOBS_COLLECTION || 'products';
-
+  const collectionName = config.firebase.jobsCollection;
   console.log(
-    `[GhostSystems] 📡 Nexus Listener: Watching products with status = "pending" in collection "${collectionName}"...`
+    `[GhostSystems][NexusListener] 📡 Watching products with status = "pending" in collection "${collectionName}"...`
   );
 
   const productsRef = db.collection(collectionName);
@@ -61,12 +20,8 @@ export function startNexusListener() {
 
   query.onSnapshot(
     (snapshot) => {
-      let pendingCount = 0;
-
       snapshot.docChanges().forEach(async (change) => {
         if (change.type !== 'added') return;
-
-        pendingCount++;
 
         const docSnap = change.doc;
         const data = docSnap.data();
@@ -74,7 +29,7 @@ export function startNexusListener() {
         const title = (data as any)?.title || '(no title)';
 
         console.log(
-          `[GhostSystems] (a) Found PENDING product: ${productId} - "${title}"`
+          `[GhostSystems][NexusListener] Detected PENDING product: ${productId} - "${title}"`
         );
 
         try {
@@ -84,24 +39,30 @@ export function startNexusListener() {
           });
 
           console.log(
-            `[GhostSystems] (b) Moved product ${productId} to DRAFT.`
+            `[GhostSystems][NexusListener] Moved product ${productId} to DRAFT.`
           );
-        } catch (err) {
+        } catch (err: any) {
+          const message = (err?.message || String(err)).slice(0, 500);
           console.error(
-            `[GhostSystems] ❌ Error moving ${productId} to DRAFT:`,
-            err
+            `[GhostSystems][NexusListener] Error moving ${productId} to DRAFT: ${message}`
           );
+
+          try {
+            await productsRef.doc(productId).update({
+              errorStage: 'nexus_listener',
+              lastErrorAt: FieldValue.serverTimestamp(),
+              lastErrorMessage: message,
+            });
+          } catch (writeErr: any) {
+            console.error(
+              `[GhostSystems][NexusListener] Failed to write error state for ${productId}: ${writeErr?.message || writeErr}`
+            );
+          }
         }
       });
-
-      if (pendingCount > 0) {
-        console.log(
-          `[GhostSystems] ✅ Processed ${pendingCount} pending products in this batch.`
-        );
-      }
     },
     (error) => {
-      console.error('[GhostSystems] ❌ Listener Error:', error);
+      console.error('[GhostSystems][NexusListener] Listener Error:', error);
     }
   );
 }

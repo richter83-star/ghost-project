@@ -1,6 +1,7 @@
 import 'dotenv/config'; // Loads variables from .env
 import express from 'express';
 import { startNexusListener } from './integrations/nexus/listener.js';
+import { processDraftProducts } from './integrations/nexus/worker.js';
 import { startShopifyPipeline } from './integrations/shopify-pipeline.js';
 import shopifyRoutes from './cloud/routes/shopify.js';
 import designRoutes from './cloud/routes/design.js';
@@ -144,6 +145,21 @@ async function main() {
     startShopifyPipeline();
   } catch (error) {
     console.error('[ERROR] Failed to start Shopify pipeline:', error);
+  }
+
+  // Draft processor (pending -> draft handled by Nexus, this handles draft -> published)
+  try {
+    const intervalMs = parseInt(process.env.DRAFT_PROCESSOR_INTERVAL_MS || '300000', 10);
+    console.log('[INIT] 🛠️ running Draft Processor...');
+    await processDraftProducts();
+    setInterval(() => {
+      processDraftProducts().catch((err) =>
+        console.error('[INIT] Draft processor run failed:', err)
+      );
+    }, intervalMs);
+    console.log(`[INIT] 🛠️ Draft Processor scheduled every ${intervalMs}ms`);
+  } catch (error) {
+    console.error('[ERROR] Failed to start Draft processor:', error);
   }
 
   // ---------------------------------------------------------
